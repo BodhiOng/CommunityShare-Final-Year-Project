@@ -32,7 +32,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<UserRole> _getUserRole(String uid) async {
     try {
       final userDoc = await FirebaseFirestore.instance
-          .collection('users')
+          .collection('USER')
           .doc(uid)
           .get();
       final userData = userDoc.data();

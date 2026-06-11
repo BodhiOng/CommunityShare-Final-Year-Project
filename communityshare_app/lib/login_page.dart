@@ -54,7 +54,7 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       final userDoc = await FirebaseFirestore.instance
-          .collection('users')
+          .collection('USER')
           .doc(user.uid)
           .get();
       final role = UserRoleX.fromStorage(userDoc.data()?['role']?.toString());

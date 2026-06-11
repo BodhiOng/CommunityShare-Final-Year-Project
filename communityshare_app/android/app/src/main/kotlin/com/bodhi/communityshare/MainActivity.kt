@@ -1,4 +1,4 @@
-package com.example.secondhand_marketplace_app
+package com.bodhi.communityshare
 
 import io.flutter.embedding.android.FlutterActivity
 

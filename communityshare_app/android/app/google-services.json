@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "123456789012",
-    "project_id": "your-project-id",
-    "storage_bucket": "your-project-id.appspot.com"
+    "project_number": "750092666085",
+    "project_id": "communityshare-bf874",
+    "storage_bucket": "communityshare-bf874.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789012:android:abcdef123456abcdef1234",
+        "mobilesdk_app_id": "1:750092666085:android:1a33afe6a6819d4690800c",
         "android_client_info": {
-          "package_name": "com.yourcompany.yourapp"
+          "package_name": "com.bodhi.communityshare"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "YOUR_API_KEY"
+          "current_key": "AIzaSyDAwPvzKI5dx32wp1jnoZmBjzccxKNgEvs"
         }
       ],
       "services": {
