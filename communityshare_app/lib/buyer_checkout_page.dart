@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:secondhand_marketplace_app/constants.dart';
-import 'package:secondhand_marketplace_app/models/cart_item.dart';
-import 'package:secondhand_marketplace_app/buyer_order_confirmation_page.dart';
+import 'package:communityshare_app/constants.dart';
+import 'package:communityshare_app/models/cart_item.dart';
+import 'package:communityshare_app/buyer_order_confirmation_page.dart';
 
 class CheckoutPage extends StatefulWidget {
   final List<CartItem> cartItems;

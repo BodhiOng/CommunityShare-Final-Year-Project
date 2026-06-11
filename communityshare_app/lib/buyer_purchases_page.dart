@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:secondhand_marketplace_app/utils/image_utils.dart';
+import 'package:communityshare_app/utils/image_utils.dart';
 import 'constants.dart';
 import 'utils/image_converter.dart';
 import 'buyer_rate_review_page.dart';

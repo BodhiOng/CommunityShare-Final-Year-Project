@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:secondhand_marketplace_app/models/product.dart';
+import 'package:communityshare_app/models/product.dart';
 
 // Mock classes
 class MockFirebaseFirestore {}

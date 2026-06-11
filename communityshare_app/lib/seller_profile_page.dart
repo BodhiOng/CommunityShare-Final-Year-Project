@@ -6,7 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
-import 'package:secondhand_marketplace_app/seller_messages_page.dart';
+import 'package:communityshare_app/seller_messages_page.dart';
 import 'constants.dart';
 import 'seller_listing_page.dart';
 import 'seller_reviews_page.dart';

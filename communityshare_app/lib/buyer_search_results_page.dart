@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:secondhand_marketplace_app/utils/image_utils.dart';
+import 'package:communityshare_app/utils/image_utils.dart';
 import 'constants.dart';
 import 'buyer_product_details_page.dart';
 import 'models/product.dart';

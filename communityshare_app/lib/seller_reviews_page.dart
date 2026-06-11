@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:secondhand_marketplace_app/utils/image_utils.dart';
+import 'package:communityshare_app/utils/image_utils.dart';
 
 import 'constants.dart';
 import 'seller_listing_page.dart';

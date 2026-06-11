@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:secondhand_marketplace_app/utils/image_utils.dart';
+import 'package:communityshare_app/utils/image_utils.dart';
 import 'constants.dart';
 import 'buyer_product_details_page.dart';
 import 'models/product.dart';
 
-class RecentItemsPage extends StatefulWidget {
-  const RecentItemsPage({super.key});
+class FeaturedItemsPage extends StatefulWidget {
+  const FeaturedItemsPage({super.key});
 
   @override
-  RecentItemsPageState createState() => RecentItemsPageState();
+  FeaturedItemsPageState createState() => FeaturedItemsPageState();
 }
 
-class RecentItemsPageState extends State<RecentItemsPage> {
+class FeaturedItemsPageState extends State<FeaturedItemsPage> {
   final TextEditingController _searchController = TextEditingController();
   RangeValues _priceRange = const RangeValues(0, 10000);
   String _selectedCondition = 'All Conditions';
@@ -23,7 +23,7 @@ class RecentItemsPageState extends State<RecentItemsPage> {
 
   // Flag to track if Firebase is available
   bool _isFirebaseAvailable = true;
-  List<Product> _recentProducts = [];
+  List<Product> _featuredProducts = [];
   bool _isLoading = true;
   
   // Map to store calculated ratings from reviews collection
@@ -46,12 +46,14 @@ class RecentItemsPageState extends State<RecentItemsPage> {
     // Initialize Firestore and check if it's available
     try {
       _firestore = FirebaseFirestore.instance;
-      _fetchRecentProducts();
+      _fetchFeaturedProducts();
     } catch (e) {
       debugPrint('Error accessing Firestore: $e');
       setState(() {
         _isFirebaseAvailable = false;
         _isLoading = false;
+        // If Firebase is not available, use sample data
+        _featuredProducts = _getSampleProducts();
       });
     }
   }
@@ -62,11 +64,13 @@ class RecentItemsPageState extends State<RecentItemsPage> {
     super.dispose();
   }
 
-  // Fetch recently added products
-  Future<void> _fetchRecentProducts() async {
+  // Fetch featured products (products with highest ad boost)
+  Future<void> _fetchFeaturedProducts() async {
     if (!_isFirebaseAvailable || _firestore == null) {
       setState(() {
         _isLoading = false;
+        // If Firebase is not available, use sample data
+        _featuredProducts = _getSampleProducts();
       });
       return;
     }
@@ -76,14 +80,11 @@ class RecentItemsPageState extends State<RecentItemsPage> {
     });
 
     try {
-      // Query products collection, order by createdAt timestamp in descending order (newest first)
+      // Query products collection, order by adBoost in descending order
       final QuerySnapshot snapshot =
           await _firestore
               .collection('products')
-              .orderBy(
-                'listedDate',
-                descending: true,
-              ) // Using the createdAt timestamp to sort by newest first
+              .orderBy('adBoost', descending: true)
               .get();
 
       // Convert the documents to Product objects
@@ -99,14 +100,16 @@ class RecentItemsPageState extends State<RecentItemsPage> {
       }
 
       setState(() {
-        _recentProducts = products;
+        _featuredProducts = products;
         _isLoading = false;
       });
     } catch (e) {
-      // Log error fetching recent products
-      debugPrint('Error fetching recent products: $e');
+      // Log error fetching featured products
+      debugPrint('Error fetching featured products: $e');
       setState(() {
         _isLoading = false;
+        // If there's an error, use sample data
+        _featuredProducts = _getSampleProducts();
       });
     }
   }
@@ -139,9 +142,93 @@ class RecentItemsPageState extends State<RecentItemsPage> {
     }
   }
 
+  // Sample products for when Firebase is not available
+  List<Product> _getSampleProducts() {
+    return [
+      Product(
+        id: '1',
+        name: 'iPhone 13 Pro',
+        description:
+            'Slightly used iPhone 13 Pro, 256GB storage, Pacific Blue color.',
+        price: 699.99,
+        imageUrl: 'https://picsum.photos/id/1/200/200',
+        category: 'Electronics',
+        sellerId: 'seller_1',
+        seller: 'TechGuru',
+        rating: 4.8,
+        condition: 'Like New',
+        listedDate: DateTime.now().subtract(const Duration(days: 5)),
+        stock: 2,
+        adBoost: 120.0,
+      ),
+      Product(
+        id: '2',
+        name: 'Sony WH-1000XM4 Headphones',
+        description:
+            'Noise cancelling headphones, black color, with original box and accessories.',
+        price: 249.99,
+        imageUrl: 'https://picsum.photos/id/2/200/200',
+        category: 'Electronics',
+        sellerId: 'seller_2',
+        seller: 'AudioPhile',
+        rating: 4.9,
+        condition: 'Good',
+        listedDate: DateTime.now().subtract(const Duration(days: 10)),
+        stock: 5,
+        adBoost: 50.0,
+      ),
+      Product(
+        id: '3',
+        name: 'MacBook Pro 2021',
+        description:
+            'M1 Pro chip, 16GB RAM, 512GB SSD, Space Gray, barely used.',
+        price: 1599.99,
+        imageUrl: 'https://picsum.photos/id/3/200/200',
+        category: 'Electronics',
+        sellerId: 'seller_3',
+        seller: 'AppleFan',
+        rating: 4.7,
+        condition: 'Like New',
+        listedDate: DateTime.now().subtract(const Duration(days: 3)),
+        stock: 1,
+        adBoost: 200.0,
+      ),
+      Product(
+        id: '4',
+        name: 'Samsung Galaxy S21',
+        description: '128GB, Phantom Black, with case and screen protector.',
+        price: 499.99,
+        imageUrl: 'https://picsum.photos/id/4/200/200',
+        category: 'Electronics',
+        sellerId: 'seller_4',
+        seller: 'MobileDeals',
+        rating: 4.5,
+        condition: 'Good',
+        listedDate: DateTime.now().subtract(const Duration(days: 15)),
+        stock: 3,
+        adBoost: 80.0,
+      ),
+      Product(
+        id: '5',
+        name: 'iPad Air 4th Gen',
+        description: '64GB, Sky Blue, with Apple Pencil 2nd Gen.',
+        price: 449.99,
+        imageUrl: 'https://picsum.photos/id/5/200/200',
+        category: 'Electronics',
+        sellerId: 'seller_5',
+        seller: 'TabletPro',
+        rating: 4.6,
+        condition: 'Good',
+        listedDate: DateTime.now().subtract(const Duration(days: 7)),
+        stock: 2,
+        adBoost: 100.0,
+      ),
+    ];
+  }
+
   // Filter the products based on selected filters
   List<Product> get filteredProducts {
-    return _recentProducts.where((product) {
+    return _featuredProducts.where((product) {
       // Price filter
       final bool priceMatch =
           product.price >= _priceRange.start &&
@@ -173,7 +260,7 @@ class RecentItemsPageState extends State<RecentItemsPage> {
       appBar: AppBar(
         backgroundColor: AppColors.deepSlateGray,
         title: Text(
-          'Recently Added Items',
+          'Featured Items',
           style: TextStyle(color: AppColors.coolGray),
         ),
         iconTheme: IconThemeData(color: AppColors.coolGray),
@@ -200,7 +287,7 @@ class RecentItemsPageState extends State<RecentItemsPage> {
               controller: _searchController,
               style: TextStyle(color: AppColors.coolGray),
               decoration: InputDecoration(
-                hintText: 'Search in recently added items...',
+                hintText: 'Search in featured items...',
                 hintStyle: TextStyle(color: AppColors.coolGray.withAlpha(128)),
                 prefixIcon: Icon(Icons.search, color: AppColors.mutedTeal),
                 filled: true,
@@ -339,7 +426,7 @@ class RecentItemsPageState extends State<RecentItemsPage> {
                     : filteredProducts.isEmpty
                     ? Center(
                       child: Text(
-                        'No recently added items found',
+                        'No featured items found',
                         style: TextStyle(color: AppColors.coolGray),
                       ),
                     )

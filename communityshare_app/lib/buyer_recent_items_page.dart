@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:secondhand_marketplace_app/utils/image_utils.dart';
+import 'package:communityshare_app/utils/image_utils.dart';
 import 'constants.dart';
 import 'buyer_product_details_page.dart';
 import 'models/product.dart';
 
-class CategoryPage extends StatefulWidget {
-  final String categoryName;
-
-  const CategoryPage({super.key, required this.categoryName});
+class RecentItemsPage extends StatefulWidget {
+  const RecentItemsPage({super.key});
 
   @override
-  CategoryPageState createState() => CategoryPageState();
+  RecentItemsPageState createState() => RecentItemsPageState();
 }
 
-class CategoryPageState extends State<CategoryPage> {
+class RecentItemsPageState extends State<RecentItemsPage> {
   final TextEditingController _searchController = TextEditingController();
   RangeValues _priceRange = const RangeValues(0, 10000);
   String _selectedCondition = 'All Conditions';
@@ -25,7 +23,7 @@ class CategoryPageState extends State<CategoryPage> {
 
   // Flag to track if Firebase is available
   bool _isFirebaseAvailable = true;
-  List<Product> _categoryProducts = [];
+  List<Product> _recentProducts = [];
   bool _isLoading = true;
   
   // Map to store calculated ratings from reviews collection
@@ -48,7 +46,7 @@ class CategoryPageState extends State<CategoryPage> {
     // Initialize Firestore and check if it's available
     try {
       _firestore = FirebaseFirestore.instance;
-      _fetchCategoryProducts();
+      _fetchRecentProducts();
     } catch (e) {
       debugPrint('Error accessing Firestore: $e');
       setState(() {
@@ -64,8 +62,8 @@ class CategoryPageState extends State<CategoryPage> {
     super.dispose();
   }
 
-  // Fetch products for the specific category
-  Future<void> _fetchCategoryProducts() async {
+  // Fetch recently added products
+  Future<void> _fetchRecentProducts() async {
     if (!_isFirebaseAvailable || _firestore == null) {
       setState(() {
         _isLoading = false;
@@ -78,11 +76,14 @@ class CategoryPageState extends State<CategoryPage> {
     });
 
     try {
-      // Query products collection, filter by category
+      // Query products collection, order by createdAt timestamp in descending order (newest first)
       final QuerySnapshot snapshot =
           await _firestore
               .collection('products')
-              .where('category', isEqualTo: widget.categoryName.toLowerCase())
+              .orderBy(
+                'listedDate',
+                descending: true,
+              ) // Using the createdAt timestamp to sort by newest first
               .get();
 
       // Convert the documents to Product objects
@@ -98,18 +99,18 @@ class CategoryPageState extends State<CategoryPage> {
       }
 
       setState(() {
-        _categoryProducts = products;
+        _recentProducts = products;
         _isLoading = false;
       });
     } catch (e) {
-      // Log error fetching category products
-      debugPrint('Error fetching category products: $e');
+      // Log error fetching recent products
+      debugPrint('Error fetching recent products: $e');
       setState(() {
         _isLoading = false;
       });
     }
   }
-
+  
   // Fetch and calculate average rating for a product from reviews collection
   Future<void> _fetchProductRating(Product product) async {
     try {
@@ -129,20 +130,18 @@ class CategoryPageState extends State<CategoryPage> {
         
         // Calculate average rating
         double averageRating = totalRating / reviewsSnapshot.docs.length;
-        
-        // Store in the map
-        setState(() {
-          _calculatedRatings[product.id] = double.parse(averageRating.toStringAsFixed(1));
-        });
+        // Store calculated rating in the map
+        _calculatedRatings[product.id] = double.parse(averageRating.toStringAsFixed(1));
       }
     } catch (e) {
       debugPrint('Error fetching ratings for product ${product.id}: $e');
+      // Keep the default rating from the product document if there's an error
     }
   }
 
   // Filter the products based on selected filters
   List<Product> get filteredProducts {
-    return _categoryProducts.where((product) {
+    return _recentProducts.where((product) {
       // Price filter
       final bool priceMatch =
           product.price >= _priceRange.start &&
@@ -174,7 +173,7 @@ class CategoryPageState extends State<CategoryPage> {
       appBar: AppBar(
         backgroundColor: AppColors.deepSlateGray,
         title: Text(
-          '${widget.categoryName} Items',
+          'Recently Added Items',
           style: TextStyle(color: AppColors.coolGray),
         ),
         iconTheme: IconThemeData(color: AppColors.coolGray),
@@ -201,7 +200,7 @@ class CategoryPageState extends State<CategoryPage> {
               controller: _searchController,
               style: TextStyle(color: AppColors.coolGray),
               decoration: InputDecoration(
-                hintText: 'Search in ${widget.categoryName}...',
+                hintText: 'Search in recently added items...',
                 hintStyle: TextStyle(color: AppColors.coolGray.withAlpha(128)),
                 prefixIcon: Icon(Icons.search, color: AppColors.mutedTeal),
                 filled: true,
@@ -251,7 +250,6 @@ class CategoryPageState extends State<CategoryPage> {
                     values: _priceRange,
                     min: 0,
                     max: 10000,
-                    divisions: 20,
                     activeColor: AppColors.mutedTeal,
                     inactiveColor: AppColors.coolGray.withAlpha(100),
                     labels: RangeLabels(
@@ -341,7 +339,7 @@ class CategoryPageState extends State<CategoryPage> {
                     : filteredProducts.isEmpty
                     ? Center(
                       child: Text(
-                        'No ${widget.categoryName} items found',
+                        'No recently added items found',
                         style: TextStyle(color: AppColors.coolGray),
                       ),
                     )
