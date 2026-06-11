@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../constants.dart';
+import '../donor_listing_page.dart';
+import '../landing_page.dart';
 import '../widgets/app_shell_scaffold.dart';
 import '../widgets/state_widgets.dart';
 import 'user_role.dart';
@@ -166,44 +168,7 @@ class _HomeOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cards = switch (role) {
-      UserRole.donor => const [
-          _ActionCardData('Create listing', 'Prepare a donation item and publish it.'),
-          _ActionCardData('Review requests', 'Check incoming requests and decide next steps.'),
-          _ActionCardData('Track handover', 'Keep donation status and meet-up details current.'),
-        ],
-      UserRole.recipient => const [
-          _ActionCardData('Browse support', 'Explore available items in your area.'),
-          _ActionCardData('Request item', 'Send a request with a short need summary.'),
-          _ActionCardData('Track collection', 'Follow request approval and handover updates.'),
-        ],
-      UserRole.hub => const [
-          _ActionCardData('Confirm handover', 'Validate donation exchanges at the hub.'),
-          _ActionCardData('Manage profile', 'Maintain location, hours, and capacity.'),
-          _ActionCardData('View activity', 'Monitor current community hub tasks.'),
-        ],
-      UserRole.admin => const [
-          _ActionCardData('Review reports', 'Inspect flagged listings and user issues.'),
-          _ActionCardData('Manage categories', 'Keep classification and moderation rules aligned.'),
-          _ActionCardData('Track platform health', 'Use reports to monitor operations.'),
-        ],
-    };
-
-    return ListView(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      children: [
-        _HeroPanel(
-          eyebrow: role.label,
-          title: 'CommunityShare foundation is in place.',
-          body: role.description,
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        for (final card in cards) ...[
-          _ActionCard(data: card),
-          const SizedBox(height: AppSpacing.md),
-        ],
-      ],
-    );
+    return RoleLandingPage(role: role);
   }
 }
 
@@ -283,14 +248,7 @@ Widget _donorDashboard(BuildContext context) => const _RoleWorkspace(
       ],
     );
 
-Widget _donorListings(BuildContext context) => const _RoleWorkspace(
-      title: 'Listings workspace',
-      points: [
-        'My Listings page',
-        'Edit or remove listing actions',
-        'Status tracking entry points',
-      ],
-    );
+Widget _donorListings(BuildContext context) => const DonorListingPage();
 
 Widget _recipientDashboard(BuildContext context) => const _RoleWorkspace(
       title: 'Recipient flow',
@@ -456,58 +414,6 @@ class _HeroPanel extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ActionCardData {
-  const _ActionCardData(this.title, this.body);
-
-  final String title;
-  final String body;
-}
-
-class _ActionCard extends StatelessWidget {
-  const _ActionCard({required this.data});
-
-  final _ActionCardData data;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: AppColors.mint.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-              ),
-              child: const Icon(Icons.arrow_outward_rounded, color: AppColors.mint),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    data.title,
-                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    data.body,
-                    style: const TextStyle(color: AppColors.mist, height: 1.5),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

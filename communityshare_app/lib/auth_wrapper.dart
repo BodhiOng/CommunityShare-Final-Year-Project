@@ -1,9 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'app/app_shell.dart';
 import 'app/user_role.dart';
+import 'app/user_role_resolver.dart';
+import 'donor_listing_page.dart';
 import 'landing_page.dart';
 import 'login_page.dart';
 import 'widgets/state_widgets.dart';
@@ -31,12 +32,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<UserRole> _getUserRole(String uid) async {
     try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('USER')
-          .doc(uid)
-          .get();
-      final userData = userDoc.data();
-      return UserRoleX.fromStorage(userData?['role']?.toString());
+      final user = _auth.currentUser;
+      if (user == null) {
+        return UserRole.recipient;
+      }
+
+      return UserRoleResolver.resolve(user);
     } catch (error) {
       debugPrint('Unable to read user role: $error');
       return UserRole.recipient;
@@ -80,8 +81,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
               );
             }
 
+            final role = roleSnapshot.data ?? UserRole.recipient;
+            if (role == UserRole.donor) {
+              return const DonorListingPage();
+            }
+
             return AppShell(
-              role: roleSnapshot.data ?? UserRole.recipient,
+              role: role,
             );
           },
         );

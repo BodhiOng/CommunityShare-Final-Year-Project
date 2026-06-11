@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../auth_wrapper.dart';
+import '../donor_listing_page.dart';
 import '../login_page.dart';
 import 'app_routes.dart';
 import 'app_shell.dart';
@@ -29,6 +30,11 @@ class AppRouter {
             role: config.role,
             initialIndex: config.initialIndex,
           ),
+          settings: settings,
+        );
+      case AppRoutes.donorListings:
+        return MaterialPageRoute(
+          builder: (_) => const DonorListingPage(),
           settings: settings,
         );
       default:

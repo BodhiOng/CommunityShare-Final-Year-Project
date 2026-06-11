@@ -1,10 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'app/app_routes.dart';
 import 'app/app_router.dart';
 import 'app/user_role.dart';
+import 'app/user_role_resolver.dart';
 import 'constants.dart';
 import 'widgets/app_forms.dart';
 
@@ -53,17 +53,21 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      final userDoc = await FirebaseFirestore.instance
-          .collection('USER')
-          .doc(user.uid)
-          .get();
-      final role = UserRoleX.fromStorage(userDoc.data()?['role']?.toString());
+      final role = await UserRoleResolver.resolve(user);
 
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed(
-        AppRoutes.shell,
-        arguments: AppShellArguments(role: role),
-      );
+      if (role == UserRole.donor) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          AppRoutes.donorListings,
+          (route) => false,
+        );
+      } else {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          AppRoutes.shell,
+          (route) => false,
+          arguments: AppShellArguments(role: role),
+        );
+      }
     } on FirebaseAuthException catch (error) {
       setState(() => _errorMessage = _getErrorMessage(error.code));
     } catch (error) {
