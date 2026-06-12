@@ -1,9 +1,10 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../constants.dart';
 import '../donor_listing_page.dart';
 import '../landing_page.dart';
+import '../recipient_browse_items_page.dart';
+import '../shared_profile_page.dart';
 import '../widgets/app_shell_scaffold.dart';
 import '../widgets/state_widgets.dart';
 import 'user_role.dart';
@@ -192,50 +193,9 @@ class _ProfilePage extends StatelessWidget {
 
   final UserRole role;
 
-  Future<void> _signOut(BuildContext context) async {
-    await FirebaseAuth.instance.signOut();
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Signed out.')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
-    return ListView(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      children: [
-        _HeroPanel(
-          eyebrow: 'Account',
-          title: user?.displayName?.trim().isNotEmpty == true
-              ? user!.displayName!
-              : (user?.email ?? 'CommunityShare user'),
-          body: 'Role: ${role.label}',
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _InfoRow(label: 'Email', value: user?.email ?? 'Not available'),
-                const SizedBox(height: AppSpacing.sm),
-                _InfoRow(label: 'UID', value: user?.uid ?? 'Not available'),
-                const SizedBox(height: AppSpacing.lg),
-                ElevatedButton.icon(
-                  onPressed: () => _signOut(context),
-                  icon: const Icon(Icons.logout),
-                  label: const Text('Sign out'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
+    return SharedProfilePage(role: role);
   }
 }
 
@@ -259,14 +219,7 @@ Widget _recipientDashboard(BuildContext context) => const _RoleWorkspace(
       ],
     );
 
-Widget _recipientBrowse(BuildContext context) => const _RoleWorkspace(
-      title: 'Browse workspace',
-      points: [
-        'Browse items grid',
-        'Search and filter controls',
-        'Request item action path',
-      ],
-    );
+Widget _recipientBrowse(BuildContext context) => const RecipientBrowseItemsPage();
 
 Widget _hubDashboard(BuildContext context) => const _RoleWorkspace(
       title: 'Hub operations',
@@ -415,31 +368,6 @@ class _HeroPanel extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 72,
-          child: Text(
-            label,
-            style: const TextStyle(color: AppColors.mint, fontWeight: FontWeight.w700),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(child: Text(value)),
-      ],
     );
   }
 }

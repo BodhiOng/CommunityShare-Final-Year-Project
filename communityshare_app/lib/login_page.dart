@@ -62,10 +62,11 @@ class _LoginPageState extends State<LoginPage> {
           (route) => false,
         );
       } else {
+        final initialIndex = role == UserRole.recipient ? 2 : 0;
         Navigator.of(context).pushNamedAndRemoveUntil(
           AppRoutes.shell,
           (route) => false,
-          arguments: AppShellArguments(role: role),
+          arguments: AppShellArguments(role: role, initialIndex: initialIndex),
         );
       }
     } on FirebaseAuthException catch (error) {

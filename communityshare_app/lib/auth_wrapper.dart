@@ -86,8 +86,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
               return const DonorListingPage();
             }
 
+            final initialIndex = role == UserRole.recipient ? 2 : 0;
             return AppShell(
               role: role,
+              initialIndex: initialIndex,
             );
           },
         );
