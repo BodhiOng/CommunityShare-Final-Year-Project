@@ -146,11 +146,6 @@ class _RecipientBrowseItemsPageState extends State<RecipientBrowseItemsPage> {
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
-          _SummaryPanel(
-            totalCount: _allListings.length,
-            availableCount: _allListings.where((item) => item.isAvailable).length,
-          ),
-          const SizedBox(height: AppSpacing.lg),
           TextField(
             controller: _searchController,
             onChanged: (_) => setState(() {}),
@@ -307,65 +302,6 @@ class _RecipientBrowseItemsPageState extends State<RecipientBrowseItemsPage> {
                 child: _ListingCard(listing: listing),
               ),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryPanel extends StatelessWidget {
-  const _SummaryPanel({
-    required this.totalCount,
-    required this.availableCount,
-  });
-
-  final int totalCount;
-  final int availableCount;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        gradient: const LinearGradient(
-          colors: [AppColors.forest, AppColors.pine],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Recipient Browse',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppColors.white,
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          const Text(
-            'Browse recent community listings, review what is still available, and send a request with a pickup note.',
-            style: TextStyle(color: AppColors.sand, height: 1.5),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
-            children: [
-              _StatusChip(
-                icon: Icons.inventory_2_outlined,
-                label: '$totalCount recent listings',
-                light: true,
-              ),
-              _StatusChip(
-                icon: Icons.check_circle_outline_rounded,
-                label: '$availableCount requestable now',
-                light: true,
-              ),
-            ],
-          ),
         ],
       ),
     );

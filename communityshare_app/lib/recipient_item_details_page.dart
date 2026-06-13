@@ -321,11 +321,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            (_donorData?['displayName'] as String?)?.trim().isNotEmpty == true
-                                ? _donorData!['displayName'] as String
-                                : (_donorData?['username'] as String?)?.trim().isNotEmpty == true
-                                    ? _donorData!['username'] as String
-                                    : 'Donor ${item.donorId}',
+                            _donorDisplayName,
                             style: Theme.of(context)
                                 .textTheme
                                 .titleMedium
@@ -333,9 +329,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                           ),
                           const SizedBox(height: AppSpacing.xs),
                           Text(
-                            (_donorData?['email'] as String?)?.trim().isNotEmpty == true
-                                ? _donorData!['email'] as String
-                                : 'Donor account linked to this listing',
+                            _donorEmail,
                             style: const TextStyle(color: AppColors.mist),
                           ),
                         ],
@@ -490,6 +484,29 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
       return 'Not set';
     }
     return DateFormat('MMM d, yyyy').format(value);
+  }
+
+  String get _donorDisplayName {
+    final displayName = (_donorData?['displayName'] as String?)?.trim();
+    if (displayName != null && displayName.isNotEmpty) {
+      return displayName;
+    }
+
+    final username = (_donorData?['username'] as String?)?.trim();
+    if (username != null && username.isNotEmpty) {
+      return username;
+    }
+
+    return 'Donor ${widget.item.donorId}';
+  }
+
+  String get _donorEmail {
+    final email = (_donorData?['email'] as String?)?.trim();
+    if (email != null && email.isNotEmpty) {
+      return email;
+    }
+
+    return 'Donor account linked to this listing';
   }
 
   String _displayNameForHub(Map<String, dynamic> data) {
