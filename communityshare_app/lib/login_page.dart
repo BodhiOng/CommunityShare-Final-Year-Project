@@ -58,8 +58,9 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       if (role == UserRole.donor) {
         Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.donorListings,
+          AppRoutes.shell,
           (route) => false,
+          arguments: const AppShellArguments(role: UserRole.donor, initialIndex: 0),
         );
       } else {
         final initialIndex = role == UserRole.recipient ? 2 : 0;

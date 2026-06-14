@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,6 +10,13 @@ import 'app/app_routes.dart';
 import 'constants.dart';
 import 'utils/image_converter.dart';
 import 'utils/image_utils.dart';
+
+final Random _idRandom = Random.secure();
+
+String _newNineDigitId(String prefix) {
+  final value = 100000000 + _idRandom.nextInt(900000000);
+  return '${prefix}_$value';
+}
 
 class DonorListingPage extends StatefulWidget {
   const DonorListingPage({super.key});
@@ -952,9 +960,8 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
         throw Exception('You can only edit your own donation listings');
       }
 
-      final docId = widget.item?.docId ??
-          'item_${DateTime.now().millisecondsSinceEpoch}';
-      final itemId = widget.item?.itemId ?? docId;
+      final docId = widget.item?.docId ?? _newNineDigitId('item');
+      final itemId = widget.item?.itemId ?? _newNineDigitId('item');
       final expiryDate =
           _selectedCategoryId == 'consumables' ? _expiryDate : null;
 

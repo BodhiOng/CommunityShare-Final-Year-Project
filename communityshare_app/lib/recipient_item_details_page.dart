@@ -1,5 +1,7 @@
 // ignore_for_file: use_build_context_synchronously
 
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +26,8 @@ class RecipientItemDetailsPage extends StatefulWidget {
 }
 
 class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
+  static final Random _random = Random.secure();
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final TextEditingController _requestNoteController = TextEditingController();
@@ -52,15 +56,20 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
 
   Future<void> _loadDonor() async {
     try {
-      final snapshot =
+      final userDoc = await _firestore.collection('USER').doc(widget.item.donorId).get();
+      final legacyDoc =
           await _firestore.collection('users').doc(widget.item.donorId).get();
+      final data = <String, dynamic>{
+        ...?legacyDoc.data(),
+        ...?userDoc.data(),
+      };
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _donorData = snapshot.data();
+        _donorData = data;
         _isLoadingDonor = false;
       });
     } catch (_) {
@@ -76,18 +85,29 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
 
   Future<void> _loadHubOptions() async {
     try {
-      final snapshot = await _firestore
+      final legacySnapshot = await _firestore
           .collection('users')
           .where('role', isEqualTo: 'hub')
           .limit(25)
           .get();
+      final userSnapshot = await _firestore
+          .collection('USER')
+          .where('role', isEqualTo: 'hub')
+          .limit(25)
+          .get();
 
-      final hubs = snapshot.docs
+      final hubs = {
+        for (final doc in legacySnapshot.docs) doc.id: _HubOption(
+          id: doc.id,
+          name: _displayNameForHub(doc.data()),
+        ),
+        for (final doc in userSnapshot.docs) doc.id: _HubOption(
+          id: doc.id,
+          name: _displayNameForHub(doc.data()),
+        ),
+      }.values
           .map(
-            (doc) => _HubOption(
-              id: doc.id,
-              name: _displayNameForHub(doc.data()),
-            ),
+            (hub) => hub,
           )
           .toList(growable: false);
 
@@ -127,13 +147,10 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
       return false;
     }
 
-    final hubId = _selectedHubId ?? _manualHubController.text.trim();
-    if (hubId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a pickup hub or enter a hub ID.')),
-      );
-      return false;
-    }
+    final hubId = _selectedHubId?.trim().isNotEmpty == true
+        ? _selectedHubId!.trim()
+        : _manualHubController.text.trim();
+    final requestNote = _requestNoteController.text.trim();
 
     setState(() {
       _isSubmitting = true;
@@ -167,17 +184,25 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
         return false;
       }
 
-      final requestRef = _firestore.collection('ITEM_REQUEST').doc();
-      await requestRef.set({
-        'requestId': requestRef.id,
+      final requestId = _newRequestId();
+      final payload = <String, dynamic>{
+        'requestId': requestId,
         'itemId': widget.item.itemId,
         'recipientId': user.uid,
-        'hubId': hubId,
-        'requestNote': _requestNoteController.text.trim(),
         'requestStatus': 'pending',
         'requestedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      if (hubId.isNotEmpty) {
+        payload['hubId'] = hubId;
+      }
+
+      if (requestNote.isNotEmpty) {
+        payload['requestNote'] = requestNote;
+      }
+
+      await _firestore.collection('ITEM_REQUEST').doc(requestId).set(payload);
 
       if (!mounted) {
         return false;
@@ -199,6 +224,11 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
       });
       return false;
     }
+  }
+
+  String _newRequestId() {
+    final digits = 100000000 + _random.nextInt(900000000);
+    return 'req_$digits';
   }
 
   @override
@@ -320,17 +350,56 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            _donorDisplayName,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipOval(
+                                child: SizedBox(
+                                  width: 56,
+                                  height: 56,
+                                  child: _donorProfileImage(),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.md),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _donorDisplayName,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(fontWeight: FontWeight.w700),
+                                    ),
+                                    const SizedBox(height: AppSpacing.xs),
+                                    Text(
+                                      _donorLocation,
+                                      style: const TextStyle(color: AppColors.mist),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            _donorEmail,
-                            style: const TextStyle(color: AppColors.mist),
+                          if (_donorBio.isNotEmpty) ...[
+                            const SizedBox(height: AppSpacing.md),
+                            Text(
+                              _donorBio,
+                              style: const TextStyle(
+                                color: AppColors.mist,
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: AppSpacing.md),
+                          Wrap(
+                            spacing: AppSpacing.sm,
+                            runSpacing: AppSpacing.sm,
+                            children: [
+                              _DetailPill(label: _donorRoleLabel, color: AppColors.pine),
+                              _DetailPill(label: _donorPhoneLabel, color: AppColors.forest),
+                            ],
                           ),
                         ],
                       ),
@@ -405,7 +474,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     const Text(
-                      'Send a request tied to a pickup hub. This writes directly to the ITEM_REQUEST collection.',
+                      'Send a request, tied to a pickup hub or independent. You can also add a note on why you wanted the item',
                       style: TextStyle(color: AppColors.mist, height: 1.5),
                     ),
                     const SizedBox(height: AppSpacing.lg),
@@ -436,9 +505,9 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                       TextField(
                         controller: _manualHubController,
                         decoration: const InputDecoration(
-                          labelText: 'Hub ID',
+                          labelText: 'Hub ID (optional)',
                           helperText:
-                              'No hub accounts were found, so enter the hub identifier manually.',
+                              'Optional. Leave blank if you do not want to link a hub.',
                         ),
                       ),
                     ],
@@ -447,9 +516,8 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                       controller: _requestNoteController,
                       maxLines: 4,
                       decoration: const InputDecoration(
-                        labelText: 'Request note',
-                        hintText:
-                            'Share context the donor should know before approving this request.',
+                        labelText: 'Request note (optional)',
+                        hintText: 'Add a note, or leave this blank.',
                       ),
                     ),
                     const SizedBox(height: AppSpacing.lg),
@@ -487,6 +555,11 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
   }
 
   String get _donorDisplayName {
+    final fullName = (_donorData?['fullName'] as String?)?.trim();
+    if (fullName != null && fullName.isNotEmpty) {
+      return fullName;
+    }
+
     final displayName = (_donorData?['displayName'] as String?)?.trim();
     if (displayName != null && displayName.isNotEmpty) {
       return displayName;
@@ -497,16 +570,94 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
       return username;
     }
 
-    return 'Donor ${widget.item.donorId}';
+    return widget.item.donorId;
   }
 
-  String get _donorEmail {
-    final email = (_donorData?['email'] as String?)?.trim();
-    if (email != null && email.isNotEmpty) {
-      return email;
+  String get _donorBio {
+    final bio = (_donorData?['bio'] as String?)?.trim();
+    if (bio != null && bio.isNotEmpty) {
+      return bio;
     }
 
-    return 'Donor account linked to this listing';
+    return '';
+  }
+
+  String get _donorLocation {
+    final city = (_donorData?['city'] as String?)?.trim();
+    final state = (_donorData?['state'] as String?)?.trim();
+    final country = (_donorData?['country'] as String?)?.trim();
+    final parts = <String>[
+      if (city != null && city.isNotEmpty) city,
+      if (state != null && state.isNotEmpty) state,
+      if (country != null && country.isNotEmpty) country,
+    ];
+
+    if (parts.isEmpty) {
+      return 'Location not provided';
+    }
+
+    return parts.join(', ');
+  }
+
+  String get _donorPhoneLabel {
+    final phone = (_donorData?['phoneNumber'] as String?)?.trim();
+    final phoneCode = (_donorData?['phoneCountryCode'] as String?)?.trim();
+    final localPhone = (_donorData?['phoneLocalNumber'] as String?)?.trim();
+
+    if (phone != null && phone.isNotEmpty) {
+      return phone;
+    }
+
+    final combined = [
+      if (phoneCode != null && phoneCode.isNotEmpty) phoneCode,
+      if (localPhone != null && localPhone.isNotEmpty) localPhone,
+    ].join(' ').trim();
+
+    if (combined.isNotEmpty) {
+      return combined;
+    }
+
+    return 'Phone not provided';
+  }
+
+  String get _donorRoleLabel {
+    final role = (_donorData?['role'] as String?)?.trim();
+    if (role != null && role.isNotEmpty) {
+      return role.toUpperCase();
+    }
+
+    return 'DONOR';
+  }
+
+  Widget _donorProfileImage() {
+    final source = (_donorData?['profileImageUrl'] as String?)?.trim() ?? '';
+    if (source.isNotEmpty) {
+      return ImageUtils.base64ToImage(
+        source,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorWidget: Container(
+          color: AppColors.forest,
+          alignment: Alignment.center,
+          child: const Icon(
+            Icons.person_outline_rounded,
+            color: AppColors.sand,
+            size: 28,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      color: AppColors.forest,
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.person_outline_rounded,
+        color: AppColors.sand,
+        size: 28,
+      ),
+    );
   }
 
   String _displayNameForHub(Map<String, dynamic> data) {

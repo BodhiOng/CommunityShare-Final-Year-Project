@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'app/app_shell.dart';
 import 'app/user_role.dart';
 import 'app/user_role_resolver.dart';
-import 'donor_listing_page.dart';
 import 'landing_page.dart';
 import 'login_page.dart';
 import 'widgets/state_widgets.dart';
@@ -82,11 +81,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
             }
 
             final role = roleSnapshot.data ?? UserRole.recipient;
-            if (role == UserRole.donor) {
-              return const DonorListingPage();
-            }
-
-            final initialIndex = role == UserRole.recipient ? 2 : 0;
+            final initialIndex = role == UserRole.donor ? 0 : 2;
             return AppShell(
               role: role,
               initialIndex: initialIndex,

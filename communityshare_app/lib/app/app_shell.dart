@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../constants.dart';
+import '../donor_incoming_requests_page.dart';
 import '../donor_listing_page.dart';
 import '../landing_page.dart';
 import '../recipient_browse_items_page.dart';
@@ -89,20 +90,18 @@ List<ShellTab> _tabsForRole(UserRole role) {
   switch (role) {
     case UserRole.donor:
       return [
-        sharedHome,
-        const ShellTab(
-          title: 'Donor Dashboard',
-          label: 'Dashboard',
-          icon: Icons.volunteer_activism_outlined,
-          builder: _donorDashboard,
-        ),
         const ShellTab(
           title: 'My Listings',
           label: 'Listings',
           icon: Icons.inventory_2_outlined,
           builder: _donorListings,
         ),
-        sharedNotifications,
+        const ShellTab(
+          title: 'Incoming Requests',
+          label: 'Requests',
+          icon: Icons.inbox_outlined,
+          builder: _donorIncomingRequests,
+        ),
         sharedProfile,
       ];
     case UserRole.recipient:
@@ -199,16 +198,10 @@ class _ProfilePage extends StatelessWidget {
   }
 }
 
-Widget _donorDashboard(BuildContext context) => const _RoleWorkspace(
-      title: 'Donor flow',
-      points: [
-        'Donation intake summary',
-        'New listing CTA',
-        'Pending request queue',
-      ],
-    );
-
 Widget _donorListings(BuildContext context) => const DonorListingPage();
+
+Widget _donorIncomingRequests(BuildContext context) =>
+    const DonorIncomingRequestsPage();
 
 Widget _recipientDashboard(BuildContext context) => const _RoleWorkspace(
       title: 'Recipient flow',
