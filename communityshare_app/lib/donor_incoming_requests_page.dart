@@ -506,6 +506,12 @@ Color requestStatusColor(String status) {
   switch (status.toLowerCase()) {
     case 'approved':
       return AppColors.mint;
+    case 'delivering':
+    case 'delivering_to_hub':
+    case 'delivering_to_recipient':
+      return AppColors.sun;
+    case 'item_at_community_hub':
+      return AppColors.pine;
     case 'handover_scheduled':
       return AppColors.sun;
     case 'completed':

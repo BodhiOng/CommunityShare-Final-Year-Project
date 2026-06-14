@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +24,7 @@ class DonorRequestDetailsPage extends StatefulWidget {
 }
 
 class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
+  static final Random _random = Random.secure();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
@@ -63,14 +66,17 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
         });
       }
 
-      final historyRef = _firestore.collection('DONATION_STATUS_HISTORY').doc();
-      batch.set(historyRef, {
-        'statusHistoryId': historyRef.id,
-        'requestId': request.requestId,
-        'status': nextStatus,
-        'changedAt': FieldValue.serverTimestamp(),
-        'changedByUserId': donorId,
-      });
+      if (nextStatus == 'approved') {
+        final historyId = _newHistoryId();
+        final historyRef = _firestore.collection('DONATION_STATUS_HISTORY').doc(historyId);
+        batch.set(historyRef, {
+          'statusHistoryId': historyId,
+          'requestId': request.requestId,
+          'status': 'approved',
+          'changedAt': FieldValue.serverTimestamp(),
+          'changedByUserId': donorId,
+        });
+      }
 
       if (nextStatus == 'approved') {
         final relatedSnapshot = await _firestore
@@ -89,17 +95,6 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
             'updatedAt': FieldValue.serverTimestamp(),
           });
 
-          final rejectHistoryRef =
-              _firestore.collection('DONATION_STATUS_HISTORY').doc();
-          batch.set(rejectHistoryRef, {
-            'statusHistoryId': rejectHistoryRef.id,
-            'requestId': doc.data()['requestId']?.toString().trim().isNotEmpty == true
-                ? doc.data()['requestId'].toString().trim()
-                : doc.id,
-            'status': 'rejected',
-            'changedAt': FieldValue.serverTimestamp(),
-            'changedByUserId': donorId,
-          });
         }
       }
 
@@ -407,12 +402,20 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
   static bool _canSelectHandover(String status) {
     switch (status.toLowerCase()) {
       case 'approved':
-      case 'handover_scheduled':
+      case 'delivering':
+      case 'delivering_to_hub':
+      case 'delivering_to_recipient':
+      case 'item_at_community_hub':
       case 'reserved':
         return true;
       default:
         return false;
     }
+  }
+
+  static String _newHistoryId() {
+    final digits = List.generate(13, (_) => _random.nextInt(10)).join();
+    return 'history_$digits';
   }
 }
 

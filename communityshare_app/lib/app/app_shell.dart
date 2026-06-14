@@ -122,20 +122,12 @@ List<ShellTab> _tabsForRole(UserRole role) {
       ];
     case UserRole.recipient:
       return [
-        sharedHome,
-        const ShellTab(
-          title: 'Recipient Dashboard',
-          label: 'Dashboard',
-          icon: Icons.favorite_border,
-          builder: _recipientDashboard,
-        ),
         const ShellTab(
           title: 'Browse Items',
           label: 'Browse',
           icon: Icons.search_rounded,
           builder: _recipientBrowse,
         ),
-        sharedNotifications,
         sharedProfile,
       ];
     case UserRole.hub:
@@ -239,15 +231,6 @@ Widget _donorHandoverPoint(BuildContext context) =>
       actionLabel: 'Open Handover',
       actionIcon: Icons.location_on_outlined,
       builder: DonorSelectHandoverPointPage.new,
-    );
-
-Widget _recipientDashboard(BuildContext context) => const _RoleWorkspace(
-      title: 'Recipient flow',
-      points: [
-        'Current requests snapshot',
-        'Pickup reminders',
-        'Recent support activity',
-      ],
     );
 
 Widget _recipientBrowse(BuildContext context) => const RecipientBrowseItemsPage();
@@ -572,8 +555,17 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
     final eligible = _requests.where((request) {
       final status = request.requestStatus.toLowerCase();
       return widget.title == 'Donation Tracking'
-          ? status == 'approved' || status == 'handover_scheduled' || status == 'completed'
-          : status == 'approved' || status == 'handover_scheduled';
+          ? status == 'approved' ||
+              status == 'delivering' ||
+              status == 'delivering_to_hub' ||
+              status == 'delivering_to_recipient' ||
+              status == 'item_at_community_hub' ||
+              status == 'completed'
+          : status == 'approved' ||
+              status == 'delivering' ||
+              status == 'delivering_to_hub' ||
+              status == 'delivering_to_recipient' ||
+              status == 'item_at_community_hub';
     }).toList(growable: false);
 
     if (eligible.isEmpty) {

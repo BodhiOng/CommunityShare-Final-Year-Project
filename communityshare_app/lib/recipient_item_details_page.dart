@@ -227,7 +227,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
   }
 
   String _newRequestId() {
-    final digits = 100000000 + _random.nextInt(900000000);
+    final digits = List.generate(13, (_) => _random.nextInt(10)).join();
     return 'req_$digits';
   }
 

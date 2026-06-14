@@ -1,11 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'constants.dart';
 import 'donor_incoming_requests_page.dart';
-import 'donor_select_handover_point_page.dart';
 import 'widgets/state_widgets.dart';
 
 class DonorDonationStatusTrackingPage extends StatefulWidget {
@@ -24,10 +22,8 @@ class DonorDonationStatusTrackingPage extends StatefulWidget {
 class _DonorDonationStatusTrackingPageState
     extends State<DonorDonationStatusTrackingPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   bool _isLoading = true;
-  bool _isCompleting = false;
   String _errorMessage = '';
   _TrackingSnapshot? _snapshot;
 
@@ -85,53 +81,19 @@ class _DonorDonationStatusTrackingPageState
       final handoverDoc =
           handoverSnapshot.docs.isNotEmpty ? handoverSnapshot.docs.first : null;
       final handoverData = handoverDoc?.data();
-      _CommunityHubSummary? hub;
-      final hubId =
-          handoverData?['hubId']?.toString().trim() ??
-              requestData['hubId']?.toString().trim() ??
-              '';
-      if (hubId.isNotEmpty) {
-        final directHubDoc =
-            await _firestore.collection('COMMUNITY_HUB').doc(hubId).get();
-        if (directHubDoc.exists) {
-          hub = _CommunityHubSummary.fromFirestore(
-            directHubDoc.id,
-            directHubDoc.data()!,
-          );
-        } else {
-          final hubSnapshot = await _firestore
-              .collection('COMMUNITY_HUB')
-              .where('hubId', isEqualTo: hubId)
-              .limit(1)
-              .get();
-          if (hubSnapshot.docs.isNotEmpty) {
-            hub = _CommunityHubSummary.fromFirestore(
-              hubSnapshot.docs.first.id,
-              hubSnapshot.docs.first.data(),
-            );
-          }
-        }
-      }
 
       final requestedAt = _readDateTime(requestData['requestedAt']);
-      final timeline = <_StatusHistoryEntry>[
-        if (requestedAt != null)
-          _StatusHistoryEntry(
-            status: 'pending',
-            changedAt: requestedAt,
-            changedByUserId:
-                requestData['recipientId']?.toString().trim() ?? '',
-            isSystemSeed: true,
-          ),
-        ...historySnapshot.docs.map(
+      final timeline = historySnapshot.docs
+          .map(
           (doc) => _StatusHistoryEntry(
             status: doc.data()['status']?.toString().trim() ?? 'unknown',
             changedAt: _readDateTime(doc.data()['changedAt']),
             changedByUserId:
                 doc.data()['changedByUserId']?.toString().trim() ?? '',
           ),
-        ),
-      ]..sort((a, b) {
+        )
+          .toList(growable: false)
+        ..sort((a, b) {
           final left = a.changedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
           final right = b.changedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
           return left.compareTo(right);
@@ -161,9 +123,7 @@ class _DonorDonationStatusTrackingPageState
           handoverStatus:
               handoverData?['handoverStatus']?.toString().trim() ?? '',
           handoverType: handoverData?['handoverType']?.toString().trim() ?? '',
-          scheduledAt: _readDateTime(handoverData?['scheduledAt']),
           completedAt: _readDateTime(handoverData?['completedAt']),
-          hub: hub,
           timeline: timeline,
         );
         _isLoading = false;
@@ -175,83 +135,6 @@ class _DonorDonationStatusTrackingPageState
       setState(() {
         _errorMessage = 'Unable to load donation tracking: $error';
         _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _openHandoverSelection() async {
-    final updated = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => DonorSelectHandoverPointPage(request: widget.request),
-      ),
-    );
-    if (updated == true && mounted) {
-      await _loadTracking();
-    }
-  }
-
-  Future<void> _markCompleted() async {
-    final donorId = _auth.currentUser?.uid;
-    final snapshot = _snapshot;
-    if (donorId == null || snapshot == null) {
-      return;
-    }
-    if (snapshot.handoverId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Set a handover point before completing the donation.'),
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _isCompleting = true;
-    });
-
-    try {
-      final batch = _firestore.batch();
-      batch.update(_firestore.collection('ITEM_REQUEST').doc(widget.request.docId), {
-        'requestStatus': 'completed',
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      batch.update(_firestore.collection('HANDOVER').doc(snapshot.handoverId), {
-        'handoverStatus': 'completed',
-        'completedAt': FieldValue.serverTimestamp(),
-      });
-      if (widget.request.itemDocId.isNotEmpty) {
-        batch.update(_firestore.collection('ITEM_LISTING').doc(widget.request.itemDocId), {
-          'availabilityStatus': 'completed',
-        });
-      }
-      final historyRef = _firestore.collection('DONATION_STATUS_HISTORY').doc();
-      batch.set(historyRef, {
-        'statusHistoryId': historyRef.id,
-        'requestId': widget.request.requestId,
-        'status': 'completed',
-        'changedAt': FieldValue.serverTimestamp(),
-        'changedByUserId': donorId,
-      });
-
-      await batch.commit();
-
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Donation marked as completed.')),
-      );
-      await _loadTracking();
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to complete donation: $error')),
-      );
-      setState(() {
-        _isCompleting = false;
       });
     }
   }
@@ -276,19 +159,6 @@ class _DonorDonationStatusTrackingPageState
     }
 
     final snapshot = _snapshot!;
-    final canSelectHandover = _canSelectHandover(snapshot.requestStatus);
-    final canComplete = snapshot.handoverId.isNotEmpty &&
-        snapshot.handoverStatus.toLowerCase() == 'scheduled' &&
-        snapshot.requestStatus.toLowerCase() != 'completed';
-    final statusJourney = _buildJourney(snapshot);
-    final readiness = _buildReadiness(snapshot);
-    final openDays = snapshot.requestedAt == null
-        ? '0'
-        : DateTime.now()
-            .difference(snapshot.requestedAt!)
-            .inDays
-            .toString();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Donation Status Tracking'),
@@ -306,55 +176,6 @@ class _DonorDonationStatusTrackingPageState
               listingStatus: snapshot.listingStatus,
               handoverStatus: snapshot.handoverStatus,
               nextAction: _nextActionCopy(snapshot),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _SectionCard(
-              title: 'Progress Journey',
-              subtitle:
-                  'Track how this request is moving from approval to completed handover.',
-              child: Column(
-                children: [
-                  for (var index = 0; index < statusJourney.length; index++) ...[
-                    _JourneyStep(
-                      step: statusJourney[index],
-                      isLast: index == statusJourney.length - 1,
-                    ),
-                    if (index != statusJourney.length - 1)
-                      const SizedBox(height: AppSpacing.sm),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Open Days',
-                    value: openDays,
-                    caption: 'Since request',
-                    color: AppColors.sun,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Timeline',
-                    value: '${snapshot.timeline.length}',
-                    caption: 'Recorded events',
-                    color: AppColors.mint,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Hub',
-                    value: snapshot.hub == null ? 'Pending' : 'Ready',
-                    caption: snapshot.hub?.hubName ?? 'Choose point',
-                    color: snapshot.hub == null ? AppColors.coral : AppColors.pine,
-                  ),
-                ),
-              ],
             ),
             const SizedBox(height: AppSpacing.md),
             _SectionCard(
@@ -393,66 +214,6 @@ class _DonorDonationStatusTrackingPageState
             ),
             const SizedBox(height: AppSpacing.md),
             _SectionCard(
-              title: 'Handover Readiness',
-              subtitle:
-                  'Readiness is derived only from your current request, hub, and handover records.',
-              child: Column(
-                children: [
-                  for (final item in readiness) ...[
-                    _ChecklistTile(item: item),
-                    if (item != readiness.last) const SizedBox(height: AppSpacing.sm),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _SectionCard(
-              title: 'Handover Brief',
-              subtitle: 'Selected hub, schedule, and execution status.',
-              child: Column(
-                children: [
-                  _InfoRow(
-                    label: 'Hub',
-                    value: snapshot.hub?.hubName ??
-                        (snapshot.hubId.isEmpty ? 'Not selected' : snapshot.hubId),
-                  ),
-                  if (snapshot.hub != null) ...[
-                    _InfoRow(label: 'Address', value: snapshot.hub!.address),
-                    _InfoRow(
-                      label: 'Hours',
-                      value: snapshot.hub!.operatingHours,
-                    ),
-                    _InfoRow(
-                      label: 'Contact',
-                      value: snapshot.hub!.contactNumber,
-                    ),
-                    _InfoRow(label: 'Hub Status', value: snapshot.hub!.statusLabel),
-                  ],
-                  _InfoRow(
-                    label: 'Type',
-                    value: snapshot.handoverType.isEmpty
-                        ? 'Not set'
-                        : titleCaseLabel(snapshot.handoverType),
-                  ),
-                  _InfoRow(
-                    label: 'Status',
-                    value: snapshot.handoverStatus.isEmpty
-                        ? 'Not set'
-                        : titleCaseLabel(snapshot.handoverStatus),
-                  ),
-                  _InfoRow(
-                    label: 'Scheduled',
-                    value: _formatDateTime(snapshot.scheduledAt),
-                  ),
-                  _InfoRow(
-                    label: 'Completed',
-                    value: _formatDateTime(snapshot.completedAt),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _SectionCard(
               title: 'Timeline',
               subtitle: 'Status history from request creation through handover.',
               child: snapshot.timeline.isEmpty
@@ -471,53 +232,6 @@ class _DonorDonationStatusTrackingPageState
                             const SizedBox(height: AppSpacing.md),
                         ],
                       ],
-                    ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _SectionCard(
-              title: 'Actions',
-              subtitle: 'Only actions supported by the current stored state are shown.',
-              child: Column(
-                children: [
-                  if (canSelectHandover)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _openHandoverSelection,
-                        icon: const Icon(Icons.location_on_outlined),
-                        label: Text(
-                          snapshot.handoverId.isEmpty
-                              ? 'Select Handover Point'
-                              : 'Update Handover Point',
-                        ),
-                      ),
-                    )
-                  else
-                    const _ActionHint(
-                      message:
-                          'Approve the request first before assigning a handover point.',
-                    ),
-                  if (canComplete) ...[
-                    const SizedBox(height: AppSpacing.sm),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _isCompleting ? null : _markCompleted,
-                        icon: _isCompleting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.mint,
-                                ),
-                              )
-                            : const Icon(Icons.task_alt_outlined),
-                        label: const Text('Mark Donation Completed'),
-                      ),
-                    ),
-                  ],
-                ],
               ),
             ),
           ],
@@ -526,107 +240,32 @@ class _DonorDonationStatusTrackingPageState
     );
   }
 
-  List<_JourneyStepState> _buildJourney(_TrackingSnapshot snapshot) {
-    final stage = _stageIndex(snapshot);
-    return [
-      _JourneyStepState(
-        title: 'Request Approved',
-        caption: 'Donor accepted the recipient request.',
-        state: stage >= 1 ? _StepVisual.complete : _StepVisual.current,
-      ),
-      _JourneyStepState(
-        title: 'Handover Planned',
-        caption: 'Hub and schedule confirmed.',
-        state: stage >= 2
-            ? _StepVisual.complete
-            : stage == 1
-                ? _StepVisual.current
-                : _StepVisual.upcoming,
-      ),
-      _JourneyStepState(
-        title: 'Donation Closed',
-        caption: 'Handover completed and request closed.',
-        state: stage >= 3
-            ? _StepVisual.complete
-            : stage == 2
-                ? _StepVisual.current
-                : _StepVisual.upcoming,
-      ),
-    ];
-  }
-
-  List<_ChecklistItem> _buildReadiness(_TrackingSnapshot snapshot) {
-    return [
-      _ChecklistItem(
-        title: 'Request accepted',
-        description: 'Current request status is ${titleCaseLabel(snapshot.requestStatus)}.',
-        isReady: snapshot.requestStatus.toLowerCase() != 'pending' &&
-            snapshot.requestStatus.toLowerCase() != 'rejected',
-      ),
-      _ChecklistItem(
-        title: 'Community hub selected',
-        description: snapshot.hub?.hubName ?? 'No hub linked yet.',
-        isReady: snapshot.hub != null || snapshot.hubId.isNotEmpty,
-      ),
-      _ChecklistItem(
-        title: 'Schedule confirmed',
-        description: snapshot.scheduledAt == null
-            ? 'No handover date is stored.'
-            : 'Scheduled for ${_formatDateTime(snapshot.scheduledAt)}.',
-        isReady: snapshot.scheduledAt != null,
-      ),
-      _ChecklistItem(
-        title: 'Handover closed',
-        description: snapshot.completedAt == null
-            ? 'Completion is still pending.'
-            : 'Completed on ${_formatDateTime(snapshot.completedAt)}.',
-        isReady: snapshot.completedAt != null,
-      ),
-    ];
-  }
-
-  int _stageIndex(_TrackingSnapshot snapshot) {
-    final requestStatus = snapshot.requestStatus.toLowerCase();
-    final handoverStatus = snapshot.handoverStatus.toLowerCase();
-    if (requestStatus == 'completed' || handoverStatus == 'completed') {
-      return 3;
-    }
-    if (requestStatus == 'handover_scheduled' || handoverStatus == 'scheduled') {
-      return 2;
-    }
-    if (requestStatus == 'approved' || requestStatus == 'reserved') {
-      return 1;
-    }
-    return 0;
-  }
-
   String _nextActionCopy(_TrackingSnapshot snapshot) {
     final requestStatus = snapshot.requestStatus.toLowerCase();
-    final handoverStatus = snapshot.handoverStatus.toLowerCase();
+    final handoverStatus = snapshot.handoverStatus.toLowerCase() == 'delivering'
+        ? (snapshot.hubId.isEmpty
+            ? 'delivering_to_recipient'
+            : 'delivering_to_hub')
+        : snapshot.handoverStatus.toLowerCase();
     if (requestStatus == 'completed' || handoverStatus == 'completed') {
       return 'Donation lifecycle is complete.';
     }
-    if (snapshot.handoverId.isEmpty || snapshot.hub == null) {
-      return 'Choose a community hub and lock the handover plan.';
+    if (snapshot.handoverId.isEmpty) {
+      return 'Choose a handover point and continue the flow.';
     }
-    if (handoverStatus == 'scheduled') {
-      return 'Carry out the handover and mark the donation completed.';
+    if (handoverStatus == 'delivering_to_hub') {
+      return 'Move the item to the community hub, then confirm hub receipt.';
+    }
+    if (handoverStatus == 'item_at_community_hub') {
+      return 'Hand the item over from the hub to the recipient.';
+    }
+    if (handoverStatus == 'delivering_to_recipient') {
+      return 'Deliver the item directly to the recipient and confirm receipt.';
     }
     if (requestStatus == 'approved') {
-      return 'Move this approved request into a scheduled handover.';
+      return 'Move this approved request into delivery.';
     }
     return 'Review the current state and continue the handover flow.';
-  }
-
-  static bool _canSelectHandover(String status) {
-    switch (status.toLowerCase()) {
-      case 'approved':
-      case 'handover_scheduled':
-      case 'reserved':
-        return true;
-      default:
-        return false;
-    }
   }
 
   static DateTime? _readDateTime(dynamic value) {
@@ -661,9 +300,7 @@ class _TrackingSnapshot {
     required this.handoverId,
     required this.handoverStatus,
     required this.handoverType,
-    required this.scheduledAt,
     required this.completedAt,
-    required this.hub,
     required this.timeline,
   });
 
@@ -679,50 +316,8 @@ class _TrackingSnapshot {
   final String handoverId;
   final String handoverStatus;
   final String handoverType;
-  final DateTime? scheduledAt;
   final DateTime? completedAt;
-  final _CommunityHubSummary? hub;
   final List<_StatusHistoryEntry> timeline;
-}
-
-class _CommunityHubSummary {
-  const _CommunityHubSummary({
-    required this.hubId,
-    required this.hubName,
-    required this.address,
-    required this.operatingHours,
-    required this.contactNumber,
-    required this.status,
-  });
-
-  final String hubId;
-  final String hubName;
-  final String address;
-  final String operatingHours;
-  final String contactNumber;
-  final String status;
-
-  String get statusLabel => titleCaseLabel(status);
-
-  factory _CommunityHubSummary.fromFirestore(
-    String docId,
-    Map<String, dynamic> data,
-  ) {
-    return _CommunityHubSummary(
-      hubId: data['hubId']?.toString().trim().isNotEmpty == true
-          ? data['hubId'].toString().trim()
-          : docId,
-      hubName: data['hubName']?.toString().trim().isNotEmpty == true
-          ? data['hubName'].toString().trim()
-          : 'Community Hub',
-      address: data['address']?.toString().trim() ?? 'Address not provided',
-      operatingHours:
-          data['operatingHours']?.toString().trim() ?? 'Hours not provided',
-      contactNumber:
-          data['contactNumber']?.toString().trim() ?? 'Contact not provided',
-      status: data['status']?.toString().trim() ?? 'inactive',
-    );
-  }
 }
 
 class _StatusHistoryEntry {
@@ -730,13 +325,11 @@ class _StatusHistoryEntry {
     required this.status,
     required this.changedAt,
     required this.changedByUserId,
-    this.isSystemSeed = false,
   });
 
   final String status;
   final DateTime? changedAt;
   final String changedByUserId;
-  final bool isSystemSeed;
 }
 
 class _HeroPanel extends StatelessWidget {
@@ -869,201 +462,6 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-enum _StepVisual { current, complete, upcoming }
-
-class _JourneyStepState {
-  const _JourneyStepState({
-    required this.title,
-    required this.caption,
-    required this.state,
-  });
-
-  final String title;
-  final String caption;
-  final _StepVisual state;
-}
-
-class _JourneyStep extends StatelessWidget {
-  const _JourneyStep({
-    required this.step,
-    required this.isLast,
-  });
-
-  final _JourneyStepState step;
-  final bool isLast;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (step.state) {
-      _StepVisual.complete => AppColors.mint,
-      _StepVisual.current => AppColors.sun,
-      _StepVisual.upcoming => AppColors.slate,
-    };
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Column(
-          children: [
-            Container(
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color,
-              ),
-            ),
-            if (!isLast)
-              Container(
-                width: 2,
-                height: 44,
-                color: color.withValues(alpha: 0.45),
-              ),
-          ],
-        ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 1),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  step.title,
-                  style: const TextStyle(
-                    color: AppColors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  step.caption,
-                  style: const TextStyle(color: AppColors.mist, height: 1.5),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.label,
-    required this.value,
-    required this.caption,
-    required this.color,
-  });
-
-  final String label;
-  final String value;
-  final String caption;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.forest,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: color.withValues(alpha: 0.45)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            value,
-            style: const TextStyle(
-              color: AppColors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            caption,
-            style: const TextStyle(color: AppColors.mist, height: 1.4),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChecklistItem {
-  const _ChecklistItem({
-    required this.title,
-    required this.description,
-    required this.isReady,
-  });
-
-  final String title;
-  final String description;
-  final bool isReady;
-}
-
-class _ChecklistTile extends StatelessWidget {
-  const _ChecklistTile({
-    required this.item,
-  });
-
-  final _ChecklistItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = item.isReady ? AppColors.mint : AppColors.sun;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-        color: AppColors.forest.withValues(alpha: 0.6),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            item.isReady
-                ? Icons.check_circle_outline_rounded
-                : Icons.schedule_outlined,
-            color: color,
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.title,
-                  style: const TextStyle(
-                    color: AppColors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  item.description,
-                  style: const TextStyle(color: AppColors.mist, height: 1.45),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _TimelineTile extends StatelessWidget {
   const _TimelineTile({
@@ -1127,11 +525,9 @@ class _TimelineTile extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  entry.isSystemSeed
-                      ? 'Initial request submitted'
-                      : entry.changedByUserId.isEmpty
-                          ? 'Updated by system'
-                          : 'Updated by ${entry.changedByUserId}',
+                  entry.changedByUserId.isEmpty
+                      ? 'Updated by system'
+                      : 'Updated by ${entry.changedByUserId}',
                   style: const TextStyle(color: AppColors.slate),
                 ),
               ],
@@ -1139,31 +535,6 @@ class _TimelineTile extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _ActionHint extends StatelessWidget {
-  const _ActionHint({
-    required this.message,
-  });
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: AppColors.sun.withValues(alpha: 0.35)),
-        color: AppColors.forest.withValues(alpha: 0.7),
-      ),
-      child: Text(
-        message,
-        style: const TextStyle(color: AppColors.mist, height: 1.5),
-      ),
     );
   }
 }
