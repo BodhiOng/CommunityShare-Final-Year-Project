@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'constants.dart';
+import 'donor_donation_status_tracking_page.dart';
 import 'donor_incoming_requests_page.dart';
+import 'donor_select_handover_point_page.dart';
 import 'utils/image_utils.dart';
 
 class DonorRequestDetailsPage extends StatefulWidget {
@@ -24,6 +26,15 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   bool _isUpdating = false;
+  late String _requestStatus;
+  late String _availabilityStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    _requestStatus = widget.request.requestStatus;
+    _availabilityStatus = widget.request.availabilityStatus;
+  }
 
   Future<void> _updateRequestStatus(String nextStatus) async {
     final donorId = _auth.currentUser?.uid;
@@ -98,6 +109,11 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
         return;
       }
 
+      setState(() {
+        _requestStatus = nextStatus;
+        _availabilityStatus = nextStatus == 'approved' ? 'reserved' : 'available';
+        _isUpdating = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -107,7 +123,6 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
           ),
         ),
       );
-      Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) {
         return;
@@ -124,7 +139,8 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
   @override
   Widget build(BuildContext context) {
     final request = widget.request;
-    final canDecide = request.requestStatus.toLowerCase() == 'pending';
+    final canDecide = _requestStatus.toLowerCase() == 'pending';
+    final canSelectHandover = _canSelectHandover(_requestStatus);
 
     return Scaffold(
       appBar: AppBar(
@@ -180,8 +196,8 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
                               color: AppColors.pine,
                             ),
                             _RequestChip(
-                              label: titleCaseLabel(request.requestStatus),
-                              color: requestStatusColor(request.requestStatus),
+                              label: titleCaseLabel(_requestStatus),
+                              color: requestStatusColor(_requestStatus),
                             ),
                           ],
                         ),
@@ -222,7 +238,7 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
                   _InfoRow(label: 'Quantity', value: '${request.itemQuantity}'),
                   _InfoRow(
                     label: 'Listing status',
-                    value: titleCaseLabel(request.availabilityStatus),
+                    value: titleCaseLabel(_availabilityStatus),
                   ),
                 ],
               ),
@@ -256,6 +272,64 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
               ),
             ),
           ],
+          const SizedBox(height: AppSpacing.md),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Next Actions',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DonorDonationStatusTrackingPage(
+                            request: request,
+                          ),
+                        ),
+                      ),
+                      icon: const Icon(Icons.timeline_outlined),
+                      label: const Text('Open Donation Status Tracking'),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: canSelectHandover
+                          ? () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      DonorSelectHandoverPointPage(
+                                    request: request,
+                                  ),
+                                ),
+                              )
+                          : null,
+                      icon: const Icon(Icons.location_on_outlined),
+                      label: const Text('Select Handover Point'),
+                    ),
+                  ),
+                  if (!canSelectHandover) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    const Text(
+                      'Approve the request first before assigning a handover point.',
+                      style: TextStyle(color: AppColors.mist),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ],
       ),
       bottomNavigationBar: canDecide
@@ -328,6 +402,17 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
         size: 30,
       ),
     );
+  }
+
+  static bool _canSelectHandover(String status) {
+    switch (status.toLowerCase()) {
+      case 'approved':
+      case 'handover_scheduled':
+      case 'reserved':
+        return true;
+      default:
+        return false;
+    }
   }
 }
 

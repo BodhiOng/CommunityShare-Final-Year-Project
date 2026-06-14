@@ -506,7 +506,12 @@ Color requestStatusColor(String status) {
   switch (status.toLowerCase()) {
     case 'approved':
       return AppColors.mint;
+    case 'handover_scheduled':
+      return AppColors.sun;
+    case 'completed':
+      return AppColors.pine;
     case 'rejected':
+    case 'cancelled':
       return AppColors.coral;
     default:
       return AppColors.sun;

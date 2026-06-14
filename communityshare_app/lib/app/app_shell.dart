@@ -1,8 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../constants.dart';
+import '../donor_donation_status_tracking_page.dart';
 import '../donor_incoming_requests_page.dart';
 import '../donor_listing_page.dart';
+import '../donor_select_handover_point_page.dart';
 import '../landing_page.dart';
 import '../recipient_browse_items_page.dart';
 import '../shared_profile_page.dart';
@@ -101,6 +105,18 @@ List<ShellTab> _tabsForRole(UserRole role) {
           label: 'Requests',
           icon: Icons.inbox_outlined,
           builder: _donorIncomingRequests,
+        ),
+        const ShellTab(
+          title: 'Donation Tracking',
+          label: 'Tracking',
+          icon: Icons.timeline_outlined,
+          builder: _donorDonationTracking,
+        ),
+        const ShellTab(
+          title: 'Handover Point',
+          label: 'Handover',
+          icon: Icons.location_on_outlined,
+          builder: _donorHandoverPoint,
         ),
         sharedProfile,
       ];
@@ -202,6 +218,28 @@ Widget _donorListings(BuildContext context) => const DonorListingPage();
 
 Widget _donorIncomingRequests(BuildContext context) =>
     const DonorIncomingRequestsPage();
+
+Widget _donorDonationTracking(BuildContext context) =>
+    const _DonorRequestLauncherPage(
+      title: 'Donation Tracking',
+      emptyTitle: 'No trackable requests yet',
+      emptyMessage:
+          'Approved or scheduled requests will appear here so you can review status and complete the handover flow.',
+      actionLabel: 'Open Tracking',
+      actionIcon: Icons.timeline_outlined,
+      builder: DonorDonationStatusTrackingPage.new,
+    );
+
+Widget _donorHandoverPoint(BuildContext context) =>
+    const _DonorRequestLauncherPage(
+      title: 'Select Handover Point',
+      emptyTitle: 'No requests ready for handover',
+      emptyMessage:
+          'Once a request is approved, you can choose the COMMUNITY_HUB handover point from here.',
+      actionLabel: 'Open Handover',
+      actionIcon: Icons.location_on_outlined,
+      builder: DonorSelectHandoverPointPage.new,
+    );
 
 Widget _recipientDashboard(BuildContext context) => const _RoleWorkspace(
       title: 'Recipient flow',
@@ -362,5 +400,291 @@ class _HeroPanel extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _DonorRequestLauncherPage extends StatefulWidget {
+  const _DonorRequestLauncherPage({
+    required this.title,
+    required this.emptyTitle,
+    required this.emptyMessage,
+    required this.actionLabel,
+    required this.actionIcon,
+    required this.builder,
+  });
+
+  final String title;
+  final String emptyTitle;
+  final String emptyMessage;
+  final String actionLabel;
+  final IconData actionIcon;
+  final Widget Function({Key? key, required DonorIncomingRequestRecord request}) builder;
+
+  @override
+  State<_DonorRequestLauncherPage> createState() =>
+      _DonorRequestLauncherPageState();
+}
+
+class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  bool _isLoading = true;
+  String _errorMessage = '';
+  List<DonorIncomingRequestRecord> _requests = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRequests();
+  }
+
+  Future<void> _loadRequests() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      final donorId = _auth.currentUser?.uid;
+      if (donorId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final listingSnapshot = await _firestore
+          .collection('ITEM_LISTING')
+          .where('donorId', isEqualTo: donorId)
+          .get();
+      final itemIds = listingSnapshot.docs
+          .map((doc) => doc.data()['itemId']?.toString().trim().isNotEmpty == true
+              ? doc.data()['itemId'].toString().trim()
+              : doc.id)
+          .toList(growable: false);
+      if (itemIds.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _requests = const [];
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final requestDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+      for (final chunk in _chunkStrings(itemIds, 10)) {
+        final snapshot = await _firestore
+            .collection('ITEM_REQUEST')
+            .where('itemId', whereIn: chunk)
+            .get();
+        requestDocs.addAll(snapshot.docs);
+      }
+
+      final usersById = await _loadUsersByIds(
+        requestDocs
+            .map((doc) => doc.data()['recipientId']?.toString().trim() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet()
+            .toList(growable: false),
+      );
+      final hubsById = await _loadUsersByIds(
+        requestDocs
+            .map((doc) => doc.data()['hubId']?.toString().trim() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet()
+            .toList(growable: false),
+      );
+
+      final records = requestDocs.map((doc) {
+        final data = doc.data();
+        final itemId = data['itemId']?.toString().trim() ?? '';
+        final itemData = {
+          for (final itemDoc in listingSnapshot.docs)
+            (itemDoc.data()['itemId']?.toString().trim().isNotEmpty == true
+                    ? itemDoc.data()['itemId'].toString().trim()
+                    : itemDoc.id):
+                {...itemDoc.data(), '_docId': itemDoc.id},
+        }[itemId] ??
+            const <String, dynamic>{};
+        final recipientId = data['recipientId']?.toString().trim() ?? '';
+        final hubId = data['hubId']?.toString().trim() ?? '';
+
+        return DonorIncomingRequestRecord(
+          requestId: data['requestId']?.toString().trim().isNotEmpty == true
+              ? data['requestId'].toString().trim()
+              : doc.id,
+          docId: doc.id,
+          itemId: itemId,
+          itemDocId: itemData['_docId']?.toString() ?? '',
+          itemTitle: itemData['title']?.toString().trim().isNotEmpty == true
+              ? itemData['title'].toString().trim()
+              : 'Community item',
+          itemPhotoUrl: itemData['photoUrl']?.toString().trim() ?? '',
+          itemCategory: itemData['category']?.toString().trim() ?? 'others',
+          itemQuantity: int.tryParse(itemData['quantity']?.toString() ?? '') ?? 1,
+          availabilityStatus:
+              itemData['availabilityStatus']?.toString().trim() ?? 'available',
+          recipientId: recipientId,
+          recipientName: _displayNameForUser(usersById[recipientId]),
+          recipientPhone: _phoneForUser(usersById[recipientId]),
+          recipientLocation: _locationForUser(usersById[recipientId]),
+          hubId: hubId,
+          hubName: _displayNameForHub(hubsById[hubId], hubId),
+          requestNote: data['requestNote']?.toString().trim() ?? '',
+          requestStatus: data['requestStatus']?.toString().trim() ?? 'pending',
+          requestedAt: _readDateTime(data['requestedAt']),
+          updatedAt: _readDateTime(data['updatedAt']),
+        );
+      }).toList(growable: false)
+        ..sort((a, b) {
+          final left = a.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final right = b.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return right.compareTo(left);
+        });
+
+      if (!mounted) return;
+      setState(() {
+        _requests = records;
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = '$error';
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.title)),
+        body: const AppLoadingState(message: 'Loading requests...'),
+      );
+    }
+
+    if (_errorMessage.isNotEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.title)),
+        body: AppErrorState(message: _errorMessage, onRetry: _loadRequests),
+      );
+    }
+
+    final eligible = _requests.where((request) {
+      final status = request.requestStatus.toLowerCase();
+      return widget.title == 'Donation Tracking'
+          ? status == 'approved' || status == 'handover_scheduled' || status == 'completed'
+          : status == 'approved' || status == 'handover_scheduled';
+    }).toList(growable: false);
+
+    if (eligible.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.title)),
+        body: AppEmptyState(
+          icon: Icons.inbox_outlined,
+          title: widget.emptyTitle,
+          message: widget.emptyMessage,
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.title)),
+      body: RefreshIndicator(
+        color: AppColors.mint,
+        onRefresh: _loadRequests,
+        child: ListView.separated(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          itemCount: eligible.length,
+          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+          itemBuilder: (context, index) {
+            final request = eligible[index];
+            return Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(AppSpacing.md),
+                title: Text(request.itemTitle),
+                subtitle: Text('${request.requestStatus} • ${request.recipientName}'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => widget.builder(request: request),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  static List<List<String>> _chunkStrings(List<String> values, int size) {
+    final chunks = <List<String>>[];
+    for (var i = 0; i < values.length; i += size) {
+      final end = (i + size) > values.length ? values.length : i + size;
+      chunks.add(values.sublist(i, end));
+    }
+    return chunks;
+  }
+
+  Future<Map<String, Map<String, dynamic>>> _loadUsersByIds(
+    List<String> ids,
+  ) async {
+    final result = <String, Map<String, dynamic>>{};
+    for (final id in ids) {
+      final usersDoc = await _firestore.collection('users').doc(id).get();
+      final userDoc = await _firestore.collection('USER').doc(id).get();
+      result[id] = {
+        ...?usersDoc.data(),
+        ...?userDoc.data(),
+      };
+    }
+    return result;
+  }
+
+  static DateTime? _readDateTime(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
+  }
+
+  static String _displayNameForUser(Map<String, dynamic>? data) {
+    if (data == null || data.isEmpty) return 'Recipient';
+    final fullName = data['fullName']?.toString().trim() ?? '';
+    if (fullName.isNotEmpty) return fullName;
+    final displayName = data['displayName']?.toString().trim() ?? '';
+    if (displayName.isNotEmpty) return displayName;
+    final username = data['username']?.toString().trim() ?? '';
+    return username.isNotEmpty ? username : 'Recipient';
+  }
+
+  static String _phoneForUser(Map<String, dynamic>? data) {
+    if (data == null || data.isEmpty) return 'Phone not provided';
+    final phone = data['phoneNumber']?.toString().trim() ?? '';
+    if (phone.isNotEmpty) return phone;
+    final phoneCode = data['phoneCountryCode']?.toString().trim() ?? '';
+    final localPhone = data['phoneLocalNumber']?.toString().trim() ?? '';
+    final combined = [phoneCode, localPhone].where((v) => v.isNotEmpty).join(' ').trim();
+    return combined.isNotEmpty ? combined : 'Phone not provided';
+  }
+
+  static String _locationForUser(Map<String, dynamic>? data) {
+    if (data == null || data.isEmpty) return 'Location not provided';
+    final parts = [
+      data['city']?.toString().trim() ?? '',
+      data['state']?.toString().trim() ?? '',
+      data['country']?.toString().trim() ?? '',
+    ].where((v) => v.isNotEmpty).toList(growable: false);
+    return parts.isNotEmpty ? parts.join(', ') : 'Location not provided';
+  }
+
+  static String _displayNameForHub(Map<String, dynamic>? data, String hubId) {
+    if (hubId.isEmpty) return 'No hub selected';
+    if (data == null || data.isEmpty) return hubId;
+    final hubName = data['hubName']?.toString().trim() ?? '';
+    if (hubName.isNotEmpty) return hubName;
+    final displayName = data['displayName']?.toString().trim() ?? '';
+    if (displayName.isNotEmpty) return displayName;
+    final fullName = data['fullName']?.toString().trim() ?? '';
+    return fullName.isNotEmpty ? fullName : hubId;
   }
 }
