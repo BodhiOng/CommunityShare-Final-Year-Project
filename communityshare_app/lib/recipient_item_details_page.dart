@@ -8,7 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'constants.dart';
+import 'donor_incoming_requests_page.dart';
 import 'models/item_listing.dart';
+import 'recipient_request_status_page.dart';
 import 'utils/image_utils.dart';
 import 'widgets/state_widgets.dart';
 
@@ -36,8 +38,10 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
   bool _isSubmitting = false;
   bool _isLoadingDonor = true;
   bool _isLoadingHubs = true;
+  bool _isLoadingRequest = true;
   Map<String, dynamic>? _donorData;
   List<_HubOption> _hubOptions = const [];
+  RecipientRequestRecord? _currentRequest;
   String? _selectedHubId;
 
   @override
@@ -45,6 +49,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     super.initState();
     _loadDonor();
     _loadHubOptions();
+    _loadCurrentRequest();
   }
 
   @override
@@ -127,6 +132,67 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
 
       setState(() {
         _isLoadingHubs = false;
+      });
+    }
+  }
+
+  Future<void> _loadCurrentRequest() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _currentRequest = null;
+        _isLoadingRequest = false;
+      });
+      return;
+    }
+
+    try {
+      final snapshot = await _firestore
+          .collection('ITEM_REQUEST')
+          .where('itemId', isEqualTo: widget.item.itemId)
+          .where('recipientId', isEqualTo: user.uid)
+          .limit(10)
+          .get();
+
+      final docs = [...snapshot.docs]
+        ..sort((left, right) {
+          final leftDate = _readDateTime(left.data()['updatedAt']) ??
+              _readDateTime(left.data()['requestedAt']) ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          final rightDate = _readDateTime(right.data()['updatedAt']) ??
+              _readDateTime(right.data()['requestedAt']) ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          return rightDate.compareTo(leftDate);
+        });
+
+      QueryDocumentSnapshot<Map<String, dynamic>>? selected;
+      for (final doc in docs) {
+        final status = doc.data()['requestStatus']?.toString().trim() ?? '';
+        if (_isActiveRequestStatus(status)) {
+          selected = doc;
+          break;
+        }
+      }
+      selected ??= docs.isNotEmpty ? docs.first : null;
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _currentRequest = selected == null ? null : _toRequestRecord(selected);
+        _isLoadingRequest = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _currentRequest = null;
+        _isLoadingRequest = false;
       });
     }
   }
@@ -214,6 +280,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Request submitted. The donor can review it now.')),
       );
+      await _loadCurrentRequest();
       return true;
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -411,6 +478,51 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                   const AppErrorState(
                     message: 'This item is past its expiry date and cannot be requested.',
                   ),
+                ] else if (_currentRequest != null) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Your Request',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Wrap(
+                            spacing: AppSpacing.sm,
+                            runSpacing: AppSpacing.sm,
+                            children: [
+                              _DetailPill(
+                                label: titleCaseLabel(_currentRequest!.requestStatus),
+                                color: requestStatusColor(
+                                  _currentRequest!.requestStatus,
+                                ),
+                              ),
+                              if (_currentRequest!.hubId.isNotEmpty)
+                                const _DetailPill(
+                                  label: 'Hub linked',
+                                  color: AppColors.sun,
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            _requestSummaryCopy(_currentRequest!),
+                            style: const TextStyle(
+                              color: AppColors.mist,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -429,17 +541,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
           top: false,
           child: SizedBox(
             width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: item.isAvailable ? _showRequestSheet : null,
-              icon: _isSubmitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.volunteer_activism_outlined),
-              label: Text(item.isAvailable ? 'Request Item' : 'Not Requestable'),
-            ),
+            child: _buildPrimaryActionButton(item),
           ),
         ),
       ),
@@ -677,6 +779,142 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     }
 
     return 'Community hub';
+  }
+
+  RecipientRequestRecord _toRequestRecord(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    return RecipientRequestRecord(
+      requestId: data['requestId']?.toString().trim().isNotEmpty == true
+          ? data['requestId'].toString().trim()
+          : doc.id,
+      docId: doc.id,
+      itemId: data['itemId']?.toString().trim() ?? widget.item.itemId,
+      itemDocId: '',
+      itemTitle: widget.item.title,
+      itemCategory: widget.item.category,
+      itemQuantity: widget.item.quantity,
+      availabilityStatus: widget.item.availabilityStatus,
+      donorId: widget.item.donorId,
+      hubId: data['hubId']?.toString().trim() ?? '',
+      requestNote: data['requestNote']?.toString().trim() ?? '',
+      requestStatus: data['requestStatus']?.toString().trim() ?? 'pending',
+      requestedAt: _readDateTime(data['requestedAt']),
+      updatedAt: _readDateTime(data['updatedAt']),
+    );
+  }
+
+  Widget _buildPrimaryActionButton(ItemListing item) {
+    if (_isLoadingRequest) {
+      return ElevatedButton.icon(
+        onPressed: null,
+        icon: const SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        label: const Text('Checking request status...'),
+      );
+    }
+
+    final request = _currentRequest;
+    if (request != null && _canTrackRequest(request.requestStatus)) {
+      return ElevatedButton.icon(
+        onPressed: () async {
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => RecipientRequestStatusPage(request: request),
+            ),
+          );
+          if (mounted) {
+            await _loadCurrentRequest();
+          }
+        },
+        icon: const Icon(Icons.timeline_outlined),
+        label: const Text('Track Request Status'),
+      );
+    }
+
+    if (request != null && request.requestStatus.toLowerCase() == 'pending') {
+      return ElevatedButton.icon(
+        onPressed: null,
+        icon: const Icon(Icons.hourglass_top_rounded),
+        label: const Text('Request Pending'),
+      );
+    }
+
+    return ElevatedButton.icon(
+      onPressed: item.isAvailable ? _showRequestSheet : null,
+      icon: _isSubmitting
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.volunteer_activism_outlined),
+      label: Text(item.isAvailable ? 'Request Item' : 'Not Requestable'),
+    );
+  }
+
+  String _requestSummaryCopy(RecipientRequestRecord request) {
+    switch (request.requestStatus.toLowerCase()) {
+      case 'approved':
+        return 'Your request has been approved. Open request status to follow handover progress.';
+      case 'delivering':
+      case 'delivering_to_hub':
+      case 'delivering_to_recipient':
+      case 'item_at_community_hub':
+      case 'completed':
+        return 'This request is already in the handover flow. Open request status for the latest updates.';
+      case 'pending':
+        return 'Your request is waiting for donor approval.';
+      case 'rejected':
+      case 'cancelled':
+        return 'This request is no longer active. You can submit another request if the item is available again.';
+      default:
+        return 'Review the latest request status before taking another action.';
+    }
+  }
+
+  static bool _isActiveRequestStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+      case 'approved':
+      case 'reserved':
+      case 'delivering':
+      case 'delivering_to_hub':
+      case 'delivering_to_recipient':
+      case 'item_at_community_hub':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  static bool _canTrackRequest(String status) {
+    switch (status.toLowerCase()) {
+      case 'approved':
+      case 'reserved':
+      case 'delivering':
+      case 'delivering_to_hub':
+      case 'delivering_to_recipient':
+      case 'item_at_community_hub':
+      case 'completed':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  static DateTime? _readDateTime(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+    if (value is DateTime) {
+      return value;
+    }
+    return null;
   }
 }
 

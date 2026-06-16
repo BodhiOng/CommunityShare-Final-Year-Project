@@ -8,7 +8,9 @@ import '../donor_incoming_requests_page.dart';
 import '../donor_listing_page.dart';
 import '../donor_select_handover_point_page.dart';
 import '../landing_page.dart';
+import '../manage_hub_profile_page.dart';
 import '../recipient_browse_items_page.dart';
+import '../recipient_request_status_page.dart';
 import '../shared_profile_page.dart';
 import '../widgets/app_shell_scaffold.dart';
 import '../widgets/state_widgets.dart';
@@ -128,24 +130,22 @@ List<ShellTab> _tabsForRole(UserRole role) {
           icon: Icons.search_rounded,
           builder: _recipientBrowse,
         ),
+        const ShellTab(
+          title: 'Request Status',
+          label: 'Status',
+          icon: Icons.timeline_outlined,
+          builder: _recipientRequestStatus,
+        ),
         sharedProfile,
       ];
     case UserRole.hub:
       return [
-        sharedHome,
         const ShellTab(
-          title: 'Hub Dashboard',
-          label: 'Dashboard',
-          icon: Icons.holiday_village_outlined,
-          builder: _hubDashboard,
+          title: 'Manage Hub Profile',
+          label: 'Hub',
+          icon: Icons.storefront_outlined,
+          builder: _hubManageProfile,
         ),
-        const ShellTab(
-          title: 'Hub Activity',
-          label: 'Activity',
-          icon: Icons.track_changes_outlined,
-          builder: _hubActivity,
-        ),
-        sharedNotifications,
         sharedProfile,
       ];
     case UserRole.admin:
@@ -235,23 +235,10 @@ Widget _donorHandoverPoint(BuildContext context) =>
 
 Widget _recipientBrowse(BuildContext context) => const RecipientBrowseItemsPage();
 
-Widget _hubDashboard(BuildContext context) => const _RoleWorkspace(
-      title: 'Hub operations',
-      points: [
-        'Handover confirmations',
-        'Hub profile maintenance',
-        'Daily coordination overview',
-      ],
-    );
+Widget _recipientRequestStatus(BuildContext context) =>
+    const _RecipientRequestStatusLauncherPage();
 
-Widget _hubActivity(BuildContext context) => const _RoleWorkspace(
-      title: 'Hub activity',
-      points: [
-        'Upcoming handovers',
-        'Completed confirmations',
-        'Operational notes',
-      ],
-    );
+Widget _hubManageProfile(BuildContext context) => const ManageHubProfilePage();
 
 Widget _adminDashboard(BuildContext context) => const _RoleWorkspace(
       title: 'Administration',
@@ -406,6 +393,206 @@ class _DonorRequestLauncherPage extends StatefulWidget {
   @override
   State<_DonorRequestLauncherPage> createState() =>
       _DonorRequestLauncherPageState();
+}
+
+class _RecipientRequestStatusLauncherPage extends StatefulWidget {
+  const _RecipientRequestStatusLauncherPage();
+
+  @override
+  State<_RecipientRequestStatusLauncherPage> createState() =>
+      _RecipientRequestStatusLauncherPageState();
+}
+
+class _RecipientRequestStatusLauncherPageState
+    extends State<_RecipientRequestStatusLauncherPage> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  bool _isLoading = true;
+  String _errorMessage = '';
+  List<RecipientRequestRecord> _requests = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRequests();
+  }
+
+  Future<void> _loadRequests() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final requestSnapshot = await _firestore
+          .collection('ITEM_REQUEST')
+          .where('recipientId', isEqualTo: userId)
+          .get();
+
+      final itemIds = requestSnapshot.docs
+          .map((doc) => doc.data()['itemId']?.toString().trim() ?? '')
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
+
+      final listingsByItemId = <String, Map<String, dynamic>>{};
+      for (final chunk in _chunkStrings(itemIds, 10)) {
+        final snapshot = await _firestore
+            .collection('ITEM_LISTING')
+            .where('itemId', whereIn: chunk)
+            .get();
+        for (final doc in snapshot.docs) {
+          final itemId = doc.data()['itemId']?.toString().trim().isNotEmpty == true
+              ? doc.data()['itemId'].toString().trim()
+              : doc.id;
+          listingsByItemId[itemId] = {
+            ...doc.data(),
+            '_docId': doc.id,
+          };
+        }
+      }
+
+      final records = requestSnapshot.docs.map((doc) {
+        final data = doc.data();
+        final itemId = data['itemId']?.toString().trim() ?? '';
+        final itemData = listingsByItemId[itemId] ?? const <String, dynamic>{};
+        return RecipientRequestRecord(
+          requestId: data['requestId']?.toString().trim().isNotEmpty == true
+              ? data['requestId'].toString().trim()
+              : doc.id,
+          docId: doc.id,
+          itemId: itemId,
+          itemDocId: itemData['_docId']?.toString() ?? '',
+          itemTitle: itemData['title']?.toString().trim().isNotEmpty == true
+              ? itemData['title'].toString().trim()
+              : 'Community item',
+          itemCategory: itemData['category']?.toString().trim() ?? 'others',
+          itemQuantity: _readInt(itemData['quantity']),
+          availabilityStatus:
+              itemData['availabilityStatus']?.toString().trim() ?? 'available',
+          donorId: itemData['donorId']?.toString().trim() ?? '',
+          hubId: data['hubId']?.toString().trim() ?? '',
+          requestNote: data['requestNote']?.toString().trim() ?? '',
+          requestStatus: data['requestStatus']?.toString().trim() ?? 'pending',
+          requestedAt: _readDateTime(data['requestedAt']),
+          updatedAt: _readDateTime(data['updatedAt']),
+        );
+      }).toList(growable: false)
+        ..sort((a, b) {
+          final left = a.updatedAt ?? a.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final right = b.updatedAt ?? b.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return right.compareTo(left);
+        });
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _requests = records;
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorMessage = 'Unable to load request status: $error';
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const AppLoadingState(message: 'Loading your request status...');
+    }
+
+    if (_errorMessage.isNotEmpty) {
+      return AppErrorState(
+        message: _errorMessage,
+        onRetry: _loadRequests,
+      );
+    }
+
+    final active = _requests.where((request) {
+      final status = request.requestStatus.toLowerCase();
+      return status == 'approved' ||
+          status == 'reserved' ||
+          status == 'delivering' ||
+          status == 'delivering_to_hub' ||
+          status == 'delivering_to_recipient' ||
+          status == 'item_at_community_hub' ||
+          status == 'completed';
+    }).toList(growable: false);
+
+    if (active.isEmpty) {
+      return const AppEmptyState(
+        icon: Icons.timeline_outlined,
+        title: 'No active requests',
+        message: 'Approved requests will appear here so you can track handover progress.',
+      );
+    }
+
+    return RefreshIndicator(
+      color: AppColors.mint,
+      onRefresh: _loadRequests,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        itemCount: active.length,
+        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+        itemBuilder: (context, index) {
+          final request = active[index];
+          return Card(
+            child: ListTile(
+              contentPadding: const EdgeInsets.all(AppSpacing.md),
+              title: Text(request.itemTitle),
+              subtitle: Text('${titleCaseLabel(request.requestStatus)} • ${request.itemCategory}'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => RecipientRequestStatusPage(request: request),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  static List<List<String>> _chunkStrings(List<String> values, int size) {
+    final chunks = <List<String>>[];
+    for (var i = 0; i < values.length; i += size) {
+      final end = (i + size) > values.length ? values.length : i + size;
+      chunks.add(values.sublist(i, end));
+    }
+    return chunks;
+  }
+
+  static int _readInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    return int.tryParse(value?.toString() ?? '') ?? 1;
+  }
+
+  static DateTime? _readDateTime(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+    if (value is DateTime) {
+      return value;
+    }
+    return null;
+  }
 }
 
 class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
