@@ -29,10 +29,12 @@ class _DonorSelectHandoverPointPageState
 
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _isEditing = false;
   String _errorMessage = '';
   String? _selectedHubId;
   String _handoverType = 'community_hub_pickup';
   String _requestStatus = '';
+  String? _handoverDocId;
   List<_CommunityHubRecord> _hubs = const [];
 
   @override
@@ -90,12 +92,14 @@ class _DonorSelectHandoverPointPageState
       setState(() {
         _requestStatus = requestData['requestStatus']?.toString().trim() ??
             widget.request.requestStatus;
+        _handoverDocId = handoverDoc?.id;
         _handoverType = inferredHandoverType;
         _selectedHubId = existingHubId.isNotEmpty
             ? existingHubId
             : hubs.isNotEmpty && inferredHandoverType == 'community_hub_pickup'
                 ? hubs.first.hubId
                 : null;
+        _isEditing = handoverDoc != null;
         _hubs = hubs;
         _isLoading = false;
       });
@@ -163,15 +167,20 @@ class _DonorSelectHandoverPointPageState
         });
       }
 
-      final handoverId = _generateHandoverId();
+      final handoverId = _handoverDocId ?? _generateHandoverId();
       final handoverRef = _firestore.collection('HANDOVER').doc(handoverId);
-      batch.set(handoverRef, {
-        'handoverId': handoverId,
-        'requestId': widget.request.requestId,
-        'hubId': isIndependent ? null : _selectedHubId,
-        'handoverStatus': deliveryStatus,
-        'completedAt': null,
-      });
+      batch.set(
+        handoverRef,
+        {
+          'handoverId': handoverId,
+          'requestId': widget.request.requestId,
+          'hubId': isIndependent ? null : _selectedHubId,
+          'handoverType': _handoverType,
+          'handoverStatus': deliveryStatus,
+          'completedAt': null,
+        },
+        SetOptions(merge: true),
+      );
 
       final historyId = _generateHistoryId();
       final historyRef = _firestore.collection('DONATION_STATUS_HISTORY').doc(historyId);
@@ -192,6 +201,11 @@ class _DonorSelectHandoverPointPageState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Handover point saved.')),
       );
+      setState(() {
+        _handoverDocId = handoverId;
+        _isEditing = true;
+        _isSaving = false;
+      });
       Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) {
@@ -199,6 +213,100 @@ class _DonorSelectHandoverPointPageState
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Unable to save handover point: $error')),
+      );
+      setState(() {
+        _isSaving = false;
+      });
+    }
+  }
+
+  Future<void> _cancelHandover() async {
+    final donorId = _auth.currentUser?.uid;
+    if (donorId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You need to sign in before canceling a handover.'),
+        ),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel handover?'),
+        content: const Text(
+          'This will reject the request and delete the handover tracking records.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Cancel handover'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) {
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      final batch = _firestore.batch();
+      final requestRef =
+          _firestore.collection('ITEM_REQUEST').doc(widget.request.docId);
+      batch.update(requestRef, {
+        'requestStatus': 'rejected',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      final itemRef = await _resolveItemRef();
+      if (itemRef != null) {
+        batch.update(itemRef, {
+          'availabilityStatus': 'available',
+        });
+      }
+
+      final handoverSnapshot = await _firestore
+          .collection('HANDOVER')
+          .where('requestId', isEqualTo: widget.request.requestId)
+          .get();
+      for (final doc in handoverSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
+      final historySnapshot = await _firestore
+          .collection('DONATION_STATUS_HISTORY')
+          .where('requestId', isEqualTo: widget.request.requestId)
+          .get();
+      for (final doc in historySnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
+      await batch.commit();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Handover canceled.')),
+      );
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to cancel handover: $error')),
       );
       setState(() {
         _isSaving = false;
@@ -319,18 +427,49 @@ class _DonorSelectHandoverPointPageState
             AppSpacing.lg,
             AppSpacing.lg,
           ),
-          child: ElevatedButton(
-            onPressed: _isSaving ? null : _saveHandover,
-            child: _isSaving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.night,
+          child: Row(
+            children: [
+              if (_isEditing) ...[
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _isSaving ? null : _cancelHandover,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.coral,
+                      side: const BorderSide(color: AppColors.coral),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                      ),
+                      minimumSize: const Size.fromHeight(52),
                     ),
-                  )
-                : const Text('Save Handover Point'),
+                    child: const Text('Cancel Handover'),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+              ],
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _isSaving ? null : _saveHandover,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                    ),
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.night,
+                          ),
+                        )
+                      : Text(_isEditing
+                          ? 'Save Changes'
+                          : 'Save Handover Point'),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -345,6 +484,28 @@ class _DonorSelectHandoverPointPageState
   String _generateHistoryId() {
     final digits = List.generate(13, (_) => _random.nextInt(10)).join();
     return 'history_$digits';
+  }
+
+  Future<DocumentReference<Map<String, dynamic>>?> _resolveItemRef() async {
+    if (widget.request.itemDocId.isNotEmpty) {
+      return _firestore.collection('ITEM_LISTING').doc(widget.request.itemDocId);
+    }
+
+    if (widget.request.itemId.isEmpty) {
+      return null;
+    }
+
+    final snapshot = await _firestore
+        .collection('ITEM_LISTING')
+        .where('itemId', isEqualTo: widget.request.itemId)
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isEmpty) {
+      return null;
+    }
+
+    return snapshot.docs.first.reference;
   }
 }
 
