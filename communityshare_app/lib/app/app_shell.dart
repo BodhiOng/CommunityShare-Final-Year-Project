@@ -11,6 +11,7 @@ import '../hub_handover_confirmation_page.dart';
 import '../landing_page.dart';
 import '../manage_hub_profile_page.dart';
 import '../recipient_browse_items_page.dart';
+import '../recipient_browse_community_hubs_page.dart';
 import '../recipient_request_status_page.dart';
 import '../shared_profile_page.dart';
 import '../widgets/app_shell_scaffold.dart';
@@ -132,6 +133,12 @@ List<ShellTab> _tabsForRole(UserRole role) {
           builder: _recipientBrowse,
         ),
         const ShellTab(
+          title: 'Community Hubs',
+          label: 'Hubs',
+          icon: Icons.storefront_outlined,
+          builder: _recipientBrowseHubs,
+        ),
+        const ShellTab(
           title: 'Request Status',
           label: 'Status',
           icon: Icons.timeline_outlined,
@@ -241,6 +248,9 @@ Widget _donorHandoverPoint(BuildContext context) =>
     );
 
 Widget _recipientBrowse(BuildContext context) => const RecipientBrowseItemsPage();
+
+Widget _recipientBrowseHubs(BuildContext context) =>
+    const RecipientBrowseCommunityHubsPage();
 
 Widget _recipientRequestStatus(BuildContext context) =>
     const _RecipientRequestStatusLauncherPage();

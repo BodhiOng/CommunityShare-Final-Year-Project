@@ -25,6 +25,13 @@ class _LoginPageState extends State<LoginPage> {
   bool _obscurePassword = true;
   String _errorMessage = '';
 
+  void _updateState(VoidCallback fn) {
+    if (!mounted) {
+      return;
+    }
+    setState(fn);
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -37,7 +44,7 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
-    setState(() {
+    _updateState(() {
       _isLoading = true;
       _errorMessage = '';
     });
@@ -56,31 +63,28 @@ class _LoginPageState extends State<LoginPage> {
       final role = await UserRoleResolver.resolve(user);
 
       if (!mounted) return;
-      if (role == UserRole.donor) {
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.shell,
-          (route) => false,
-          arguments: const AppShellArguments(role: UserRole.donor, initialIndex: 0),
-        );
-      } else {
-        final initialIndex = role == UserRole.recipient ? 2 : 0;
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.shell,
-          (route) => false,
-          arguments: AppShellArguments(role: role, initialIndex: initialIndex),
-        );
-      }
+      final route = role == UserRole.donor
+          ? AppRoutes.shell
+          : AppRoutes.shell;
+      final arguments = role == UserRole.donor
+          ? const AppShellArguments(role: UserRole.donor, initialIndex: 0)
+          : AppShellArguments(role: role, initialIndex: 0);
+
+      if (!mounted) return;
+      await Navigator.of(context).pushNamedAndRemoveUntil(
+        route,
+        (route) => false,
+        arguments: arguments,
+      );
     } on FirebaseAuthException catch (error) {
-      setState(() => _errorMessage = _getErrorMessage(error.code));
+      _updateState(() => _errorMessage = _getErrorMessage(error.code));
     } catch (error) {
       debugPrint('Login failure: $error');
-      setState(() {
+      _updateState(() {
         _errorMessage = 'Unable to log in right now. Please try again.';
       });
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      _updateState(() => _isLoading = false);
     }
   }
 

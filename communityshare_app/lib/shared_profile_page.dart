@@ -101,6 +101,10 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
   }
 
   Future<void> _loadLocationData({bool refresh = false}) async {
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
       _locationErrorMessage = null;
       _isLoadingLocationData = true;
@@ -394,6 +398,9 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     }
 
     final city = _cityOptions.contains(value) ? value : _cityOptions.first;
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _selectedCity = city;
     });

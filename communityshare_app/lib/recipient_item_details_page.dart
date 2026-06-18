@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'constants.dart';
 import 'donor_incoming_requests_page.dart';
 import 'models/item_listing.dart';
+import 'recipient_browse_community_hubs_page.dart';
 import 'recipient_request_status_page.dart';
 import 'utils/image_utils.dart';
 import 'widgets/state_widgets.dart';
@@ -40,9 +41,9 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
   bool _isLoadingHubs = true;
   bool _isLoadingRequest = true;
   Map<String, dynamic>? _donorData;
-  List<_HubOption> _hubOptions = const [];
+  List<CommunityHubBrowseRecord> _hubOptions = const [];
   RecipientRequestRecord? _currentRequest;
-  String? _selectedHubId;
+  CommunityHubBrowseRecord? _selectedHub;
 
   @override
   void initState() {
@@ -90,31 +91,17 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
 
   Future<void> _loadHubOptions() async {
     try {
-      final legacySnapshot = await _firestore
-          .collection('users')
-          .where('role', isEqualTo: 'hub')
-          .limit(25)
-          .get();
-      final userSnapshot = await _firestore
-          .collection('USER')
-          .where('role', isEqualTo: 'hub')
-          .limit(25)
-          .get();
-
-      final hubs = {
-        for (final doc in legacySnapshot.docs) doc.id: _HubOption(
-          id: doc.id,
-          name: _displayNameForHub(doc.data()),
-        ),
-        for (final doc in userSnapshot.docs) doc.id: _HubOption(
-          id: doc.id,
-          name: _displayNameForHub(doc.data()),
-        ),
-      }.values
+      final snapshot = await _firestore.collection('COMMUNITY_HUB').get();
+      final hubs = snapshot.docs
           .map(
-            (hub) => hub,
+            (doc) => CommunityHubBrowseRecord.fromFirestore(doc.id, doc.data()),
           )
-          .toList(growable: false);
+          .where((hub) => hub.status.toLowerCase() == 'active')
+          .toList(growable: false)
+        ..sort(
+          (left, right) =>
+              left.hubName.toLowerCase().compareTo(right.hubName.toLowerCase()),
+        );
 
       if (!mounted) {
         return;
@@ -122,7 +109,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
 
       setState(() {
         _hubOptions = hubs;
-        _selectedHubId = hubs.isNotEmpty ? hubs.first.id : null;
+        _selectedHub = hubs.isNotEmpty ? hubs.first : null;
         _isLoadingHubs = false;
       });
     } catch (_) {
@@ -213,8 +200,8 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
       return false;
     }
 
-    final hubId = _selectedHubId?.trim().isNotEmpty == true
-        ? _selectedHubId!.trim()
+    final hubId = _selectedHub?.hubId.trim().isNotEmpty == true
+        ? _selectedHub!.hubId.trim()
         : _manualHubController.text.trim();
     final requestNote = _requestNoteController.text.trim();
 
@@ -583,25 +570,60 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                     if (_isLoadingHubs)
                       const AppLoadingState(message: 'Loading pickup hubs...')
                     else if (_hubOptions.isNotEmpty) ...[
-                      DropdownButtonFormField<String>(
-                        value: _selectedHubId,
-                        decoration: const InputDecoration(
-                          labelText: 'Pickup hub',
-                        ),
-                        items: _hubOptions
-                            .map(
-                              (hub) => DropdownMenuItem<String>(
-                                value: hub.id,
-                                child: Text(hub.name),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Pickup hub',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
                               ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          setSheetState(() {
-                            _selectedHubId = value;
-                            _manualHubController.clear();
-                          });
-                        },
+                              const SizedBox(height: AppSpacing.xs),
+                              const Text(
+                                'Browse active community hubs to review their details before linking one to this request.',
+                                style: TextStyle(
+                                  color: AppColors.mist,
+                                  height: 1.5,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.md),
+                              if (_selectedHub != null) ...[
+                                _HubSelectionSummary(hub: _selectedHub!),
+                                const SizedBox(height: AppSpacing.md),
+                              ],
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: () async {
+                                    final hub =
+                                        await Navigator.of(context).push<CommunityHubBrowseRecord>(
+                                      MaterialPageRoute(
+                                        builder: (_) => RecipientBrowseCommunityHubsPage(
+                                          selectedHubId: _selectedHub?.hubId,
+                                          selectionEnabled: true,
+                                        ),
+                                      ),
+                                    );
+                                    if (hub == null || !context.mounted) {
+                                      return;
+                                    }
+                                    setSheetState(() {
+                                      _selectedHub = hub;
+                                      _manualHubController.clear();
+                                    });
+                                  },
+                                  icon: const Icon(Icons.storefront_outlined),
+                                  label: const Text('Browse Community Hubs'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ] else ...[
                       TextField(
@@ -762,25 +784,6 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     );
   }
 
-  String _displayNameForHub(Map<String, dynamic> data) {
-    final displayName = (data['displayName'] as String?)?.trim();
-    if (displayName != null && displayName.isNotEmpty) {
-      return displayName;
-    }
-
-    final username = (data['username'] as String?)?.trim();
-    if (username != null && username.isNotEmpty) {
-      return username;
-    }
-
-    final name = (data['name'] as String?)?.trim();
-    if (name != null && name.isNotEmpty) {
-      return name;
-    }
-
-    return 'Community hub';
-  }
-
   RecipientRequestRecord _toRequestRecord(
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
   ) {
@@ -918,14 +921,61 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
   }
 }
 
-class _HubOption {
-  const _HubOption({
-    required this.id,
-    required this.name,
+class _HubSelectionSummary extends StatelessWidget {
+  const _HubSelectionSummary({
+    required this.hub,
   });
 
-  final String id;
-  final String name;
+  final CommunityHubBrowseRecord hub;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: AppColors.mint.withValues(alpha: 0.35)),
+        color: AppColors.pine.withValues(alpha: 0.18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            hub.hubName,
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Hub ID: ${hub.hubId}',
+            style: const TextStyle(color: AppColors.slate),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            hub.address.isNotEmpty ? hub.address : 'Address not provided',
+            style: const TextStyle(color: AppColors.mist),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            hub.operatingHours.isNotEmpty
+                ? hub.operatingHours
+                : 'Operating hours not provided',
+            style: const TextStyle(color: AppColors.mist),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            hub.contactNumber.isNotEmpty
+                ? hub.contactNumber
+                : 'Contact number not provided',
+            style: const TextStyle(color: AppColors.mist),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _DetailPill extends StatelessWidget {

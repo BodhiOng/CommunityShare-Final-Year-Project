@@ -18,6 +18,7 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   bool _showSplash = true;
+  Future<UserRole>? _roleFuture;
 
   @override
   void initState() {
@@ -43,6 +44,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
   }
 
+  Future<UserRole> _roleFutureFor(String uid) {
+    final future = _roleFuture;
+    if (future != null) {
+      return future;
+    }
+
+    final resolved = _getUserRole(uid);
+    _roleFuture = resolved;
+    return resolved;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_showSplash) {
@@ -64,7 +76,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
         final user = snapshot.data!;
         return FutureBuilder<UserRole>(
-          future: _getUserRole(user.uid),
+          future: _roleFutureFor(user.uid),
           builder: (context, roleSnapshot) {
             if (roleSnapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
@@ -81,7 +93,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
             }
 
             final role = roleSnapshot.data ?? UserRole.recipient;
-            final initialIndex = role == UserRole.donor ? 0 : 2;
+            final initialIndex = role == UserRole.donor ? 0 : 0;
             return AppShell(
               role: role,
               initialIndex: initialIndex,
