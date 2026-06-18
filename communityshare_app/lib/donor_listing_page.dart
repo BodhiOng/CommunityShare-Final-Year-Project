@@ -1068,40 +1068,76 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
                   const SizedBox(height: AppSpacing.lg),
                   GestureDetector(
                     onTap: _pickImage,
-                    child: Container(
-                      width: double.infinity,
-                      height: 188,
-                      decoration: BoxDecoration(
-                        color: AppColors.forest,
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                        border: Border.all(color: AppColors.pine),
-                      ),
-                      child: _imageFile != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(AppRadius.md),
-                              child: Image.file(_imageFile!, fit: BoxFit.cover),
-                            )
-                          : _photoUrl.trim().isNotEmpty
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          height: 188,
+                          decoration: BoxDecoration(
+                            color: AppColors.forest,
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            border: Border.all(color: AppColors.pine),
+                          ),
+                          child: _imageFile != null
                               ? ClipRRect(
                                   borderRadius:
                                       BorderRadius.circular(AppRadius.md),
-                                  child: ImageUtils.base64ToImage(
-                                    _photoUrl,
+                                  child: Image.file(
+                                    _imageFile!,
                                     fit: BoxFit.cover,
+                                    width: double.infinity,
                                   ),
                                 )
-                              : const Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.add_photo_alternate_outlined,
-                                      size: 44,
-                                      color: AppColors.mint,
+                              : _photoUrl.trim().isNotEmpty
+                                  ? ClipRRect(
+                                      borderRadius:
+                                          BorderRadius.circular(AppRadius.md),
+                                      child: ImageUtils.base64ToImage(
+                                        _photoUrl,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    )
+                                  : const Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.add_photo_alternate_outlined,
+                                          size: 44,
+                                          color: AppColors.mint,
+                                        ),
+                                        SizedBox(height: AppSpacing.sm),
+                                        Text('Tap to add an image'),
+                                      ],
                                     ),
-                                    SizedBox(height: AppSpacing.sm),
-                                    Text('Tap to add an image'),
-                                  ],
+                        ),
+                        if (_imageFile != null || _photoUrl.trim().isNotEmpty)
+                          Positioned(
+                            top: 10,
+                            right: 10,
+                            child: Material(
+                              color: AppColors.night.withValues(alpha: 0.72),
+                              shape: const CircleBorder(),
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: () {
+                                  setState(() {
+                                    _imageFile = null;
+                                    _photoUrl = '';
+                                  });
+                                },
+                                child: const Padding(
+                                  padding: EdgeInsets.all(6),
+                                  child: Icon(
+                                    Icons.close_rounded,
+                                    size: 18,
+                                    color: AppColors.white,
+                                  ),
                                 ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: AppSpacing.lg),

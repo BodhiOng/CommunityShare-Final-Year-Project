@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'constants.dart';
+import 'donor_public_profile_page.dart';
 import 'donor_incoming_requests_page.dart';
 import 'models/item_listing.dart';
 import 'recipient_browse_community_hubs_page.dart';
@@ -398,64 +399,89 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                     child: AppLoadingState(message: 'Loading donor details...'),
                   )
                 else
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ClipOval(
-                                child: SizedBox(
-                                  width: 56,
-                                  height: 56,
-                                  child: _donorProfileImage(),
-                                ),
-                              ),
-                              const SizedBox(width: AppSpacing.md),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _donorDisplayName,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(fontWeight: FontWeight.w700),
-                                    ),
-                                    const SizedBox(height: AppSpacing.xs),
-                                    Text(
-                                      _donorLocation,
-                                      style: const TextStyle(color: AppColors.mist),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                  InkWell(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => DonorPublicProfilePage(
+                            donorId: widget.item.donorId,
+                            initialDonorData: _donorData,
+                            highlightedItemId: widget.item.itemId,
                           ),
-                          if (_donorBio.isNotEmpty) ...[
-                            const SizedBox(height: AppSpacing.md),
-                            Text(
-                              _donorBio,
-                              style: const TextStyle(
-                                color: AppColors.mist,
-                                height: 1.5,
-                              ),
+                        ),
+                      );
+                    },
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ClipOval(
+                                  child: SizedBox(
+                                    width: 56,
+                                    height: 56,
+                                    child: _donorProfileImage(),
+                                  ),
+                                ),
+                                const SizedBox(width: AppSpacing.md),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _donorDisplayName,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(fontWeight: FontWeight.w700),
+                                      ),
+                                      const SizedBox(height: AppSpacing.xs),
+                                      Text(
+                                        _donorLocation,
+                                        style: const TextStyle(color: AppColors.mist),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: AppColors.sand,
+                                ),
+                              ],
                             ),
-                          ],
-                          const SizedBox(height: AppSpacing.md),
-                          Wrap(
-                            spacing: AppSpacing.sm,
-                            runSpacing: AppSpacing.sm,
-                            children: [
-                              _DetailPill(label: _donorRoleLabel, color: AppColors.pine),
-                              _DetailPill(label: _donorPhoneLabel, color: AppColors.forest),
+                            if (_donorBio.isNotEmpty) ...[
+                              const SizedBox(height: AppSpacing.md),
+                              Text(
+                                _donorBio,
+                                style: const TextStyle(
+                                  color: AppColors.mist,
+                                  height: 1.5,
+                                ),
+                              ),
                             ],
-                          ),
-                        ],
+                            const SizedBox(height: AppSpacing.md),
+                            Wrap(
+                              spacing: AppSpacing.sm,
+                              runSpacing: AppSpacing.sm,
+                              children: [
+                                _DetailPill(
+                                  label: _donorRoleLabel,
+                                  color: AppColors.pine,
+                                ),
+                                _DetailPill(
+                                  label: _donorPhoneLabel,
+                                  color: AppColors.forest,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: AppSpacing.sm)
+                          ],
+                        ),
                       ),
                     ),
                   ),

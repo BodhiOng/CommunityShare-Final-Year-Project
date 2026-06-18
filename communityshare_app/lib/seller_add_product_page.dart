@@ -227,42 +227,73 @@ class _AddProductPageState extends State<AddProductPage> {
                     Center(
                       child: GestureDetector(
                         onTap: _pickImage,
-                        child: Container(
-                          width: 150,
-                          height: 150,
-                          decoration: BoxDecoration(
-                            color: AppColors.deepSlateGray,
-                            borderRadius: BorderRadius.circular(8.0),
-                            border: Border.all(
-                              color: AppColors.mutedTeal,
-                              width: 1.0,
-                            ),
-                          ),
-                          child: _imageFile != null
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(8.0),
-                                  child: Image.file(
-                                    _imageFile!,
-                                    fit: BoxFit.cover,
-                                  ),
-                                )
-                              : Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.add_photo_alternate,
-                                      color: AppColors.mutedTeal,
-                                      size: 50,
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 150,
+                              height: 150,
+                              decoration: BoxDecoration(
+                                color: AppColors.deepSlateGray,
+                                borderRadius: BorderRadius.circular(8.0),
+                                border: Border.all(
+                                  color: AppColors.mutedTeal,
+                                  width: 1.0,
+                                ),
+                              ),
+                              child: _imageFile != null
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(8.0),
+                                      child: Image.file(
+                                        _imageFile!,
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                      ),
+                                    )
+                                  : Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(
+                                          Icons.add_photo_alternate,
+                                          color: AppColors.mutedTeal,
+                                          size: 50,
+                                        ),
+                                        const SizedBox(height: 8.0),
+                                        const Text(
+                                          'Add Product Image',
+                                          style: TextStyle(
+                                            color: AppColors.coolGray,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 8.0),
-                                    const Text(
-                                      'Add Product Image',
-                                      style: TextStyle(
-                                        color: AppColors.coolGray,
+                            ),
+                            if (_imageFile != null)
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: Material(
+                                  color: Colors.black.withAlpha(140),
+                                  shape: const CircleBorder(),
+                                  child: InkWell(
+                                    customBorder: const CircleBorder(),
+                                    onTap: () {
+                                      setState(() {
+                                        _imageFile = null;
+                                      });
+                                    },
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(4.0),
+                                      child: Icon(
+                                        Icons.close_rounded,
+                                        size: 16,
+                                        color: Colors.white,
                                       ),
                                     ),
-                                  ],
+                                  ),
                                 ),
+                              ),
+                          ],
                         ),
                       ),
                     ),

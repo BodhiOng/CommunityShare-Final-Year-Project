@@ -19,6 +19,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   bool _showSplash = true;
   Future<UserRole>? _roleFuture;
+  String? _resolvedUid;
 
   @override
   void initState() {
@@ -46,12 +47,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<UserRole> _roleFutureFor(String uid) {
     final future = _roleFuture;
-    if (future != null) {
+    if (future != null && _resolvedUid == uid) {
       return future;
     }
 
     final resolved = _getUserRole(uid);
     _roleFuture = resolved;
+    _resolvedUid = uid;
     return resolved;
   }
 
@@ -71,6 +73,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
 
         if (!snapshot.hasData) {
+          _roleFuture = null;
+          _resolvedUid = null;
           return const LoginPage();
         }
 
