@@ -92,20 +92,22 @@ class AppShellScaffold extends StatelessWidget {
         ),
         child: child,
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: currentIndex,
-        onDestinationSelected: onTap,
-        backgroundColor: AppColors.forest,
-        indicatorColor: AppColors.mint.withValues(alpha: 0.18),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: [
-          for (final item in destinations)
-            NavigationDestination(
-              icon: Icon(item.icon),
-              label: item.label,
-            ),
-        ],
-      ),
+      bottomNavigationBar: destinations.length >= 2
+          ? NavigationBar(
+              selectedIndex: currentIndex,
+              onDestinationSelected: onTap,
+              backgroundColor: AppColors.forest,
+              indicatorColor: AppColors.mint.withValues(alpha: 0.18),
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              destinations: [
+                for (final item in destinations)
+                  NavigationDestination(
+                    icon: Icon(item.icon),
+                    label: item.label,
+                  ),
+              ],
+            )
+          : null,
     );
   }
 }

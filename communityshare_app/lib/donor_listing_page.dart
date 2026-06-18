@@ -6,7 +6,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
-import 'app/app_routes.dart';
 import 'constants.dart';
 import 'utils/image_converter.dart';
 import 'utils/image_utils.dart';
@@ -36,6 +35,7 @@ class _DonorListingPageState extends State<DonorListingPage> {
   bool _deleteMode = false;
   bool _isLoading = true;
   String _errorMessage = '';
+  String _selectedAvailabilityFilter = 'all';
 
   @override
   void initState() {
@@ -79,7 +79,7 @@ class _DonorListingPageState extends State<DonorListingPage> {
 
       setState(() {
         _items = items;
-        _filteredItems = _applySearch(items, _searchController.text);
+        _filteredItems = _applyFilters(items, _searchController.text);
         _isLoading = false;
       });
     } catch (error) {
@@ -96,29 +96,44 @@ class _DonorListingPageState extends State<DonorListingPage> {
 
   void _filterItems() {
     setState(() {
-      _filteredItems = _applySearch(_items, _searchController.text);
+      _filteredItems = _applyFilters(_items, _searchController.text);
       _selectedForDelete.removeWhere(
         (docId) => !_filteredItems.any((item) => item.docId == docId),
       );
     });
   }
 
-  List<DonorListingItem> _applySearch(
+  void _setAvailabilityFilter(String value) {
+    if (_selectedAvailabilityFilter == value) {
+      return;
+    }
+
+    setState(() {
+      _selectedAvailabilityFilter = value;
+      _filteredItems = _applyFilters(_items, _searchController.text);
+      _selectedForDelete.removeWhere(
+        (docId) => !_filteredItems.any((item) => item.docId == docId),
+      );
+    });
+  }
+
+  List<DonorListingItem> _applyFilters(
     List<DonorListingItem> items,
     String query,
   ) {
+    final normalizedAvailability = _selectedAvailabilityFilter.trim().toLowerCase();
     final normalizedQuery = query.trim().toLowerCase();
-    if (normalizedQuery.isEmpty) {
-      return List<DonorListingItem>.from(items);
-    }
-
     return items.where((item) {
-      return item.title.toLowerCase().contains(normalizedQuery) ||
+      final matchesAvailability = normalizedAvailability == 'all' ||
+          item.availabilityStatus.toLowerCase() == normalizedAvailability;
+      final matchesQuery = normalizedQuery.isEmpty ||
+          item.title.toLowerCase().contains(normalizedQuery) ||
           item.description.toLowerCase().contains(normalizedQuery) ||
           item.category.toLowerCase().contains(normalizedQuery) ||
           item.condition.toLowerCase().contains(normalizedQuery) ||
           item.availabilityStatus.toLowerCase().contains(normalizedQuery) ||
           item.itemId.toLowerCase().contains(normalizedQuery);
+      return matchesAvailability && matchesQuery;
     }).toList();
   }
 
@@ -145,6 +160,31 @@ class _DonorListingPageState extends State<DonorListingPage> {
         _selectedForDelete.clear();
       }
     });
+  }
+
+  Widget _buildAvailabilityFilterChip({
+    required String label,
+    required String value,
+  }) {
+    final selected = _selectedAvailabilityFilter == value;
+    return FilterChip(
+      selected: selected,
+      showCheckmark: false,
+      label: Text(label),
+      onSelected: (_) => _setAvailabilityFilter(value),
+      backgroundColor: AppColors.forest,
+      selectedColor: AppColors.mint.withValues(alpha: 0.18),
+      labelStyle: TextStyle(
+        color: selected ? AppColors.mint : AppColors.sand,
+        fontWeight: FontWeight.w600,
+      ),
+      side: BorderSide(
+        color: selected ? AppColors.mint : AppColors.pine,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(999),
+      ),
+    );
   }
 
   void _toggleSelectedForDelete(String docId) {
@@ -226,18 +266,6 @@ class _DonorListingPageState extends State<DonorListingPage> {
     }
   }
 
-  Future<void> _signOut() async {
-    await _auth.signOut();
-    if (!mounted) {
-      return;
-    }
-
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      AppRoutes.auth,
-      (route) => false,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -245,14 +273,9 @@ class _DonorListingPageState extends State<DonorListingPage> {
       child: Scaffold(
         backgroundColor: AppColors.night,
         appBar: AppBar(
-          title: const Text('Donor Listings'),
-          actions: [
-            IconButton(
-              tooltip: 'Sign out',
-              onPressed: _signOut,
-              icon: const Icon(Icons.logout_rounded),
-            ),
-          ],
+          toolbarHeight: 0,
+          automaticallyImplyLeading: false,
+          title: const SizedBox.shrink(),
         ),
         body: Stack(
           children: [
@@ -278,6 +301,46 @@ class _DonorListingPageState extends State<DonorListingPage> {
                             icon: const Icon(Icons.close_rounded),
                           ),
                     hintText: 'Search your donations',
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                SizedBox(
+                  height: 44,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: 5,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(width: AppSpacing.sm),
+                    itemBuilder: (context, index) {
+                      switch (index) {
+                        case 0:
+                          return _buildAvailabilityFilterChip(
+                            label: 'All',
+                            value: 'all',
+                          );
+                        case 1:
+                          return _buildAvailabilityFilterChip(
+                            label: 'Available',
+                            value: 'available',
+                          );
+                        case 2:
+                          return _buildAvailabilityFilterChip(
+                            label: 'Reserved',
+                            value: 'reserved',
+                          );
+                        case 3:
+                          return _buildAvailabilityFilterChip(
+                            label: 'Claimed',
+                            value: 'claimed',
+                          );
+                        default:
+                          return _buildAvailabilityFilterChip(
+                            label: 'Expired',
+                            value: 'expired',
+                          );
+                      }
+                    },
                   ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -529,46 +592,37 @@ class _DonationCard extends StatelessWidget {
                   builder: (context, constraints) {
                     final chipWidth =
                         (constraints.maxWidth - AppSpacing.sm) / 2;
-                    return Column(
+                    return Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
                       children: [
-                        Row(
-                          children: [
-                            SizedBox(
-                              width: chipWidth,
-                              child: _MetaChip(
-                                icon: Icons.scale_outlined,
-                                label: item.condition,
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            SizedBox(
-                              width: chipWidth,
-                              child: _MetaChip(
-                                icon: Icons.inventory_2_outlined,
-                                label: 'Qty ${item.quantity}',
-                              ),
-                            ),
-                          ],
+                        SizedBox(
+                          width: chipWidth,
+                          child: _MetaChip(
+                            icon: Icons.scale_outlined,
+                            label: item.condition,
+                          ),
                         ),
-                        const SizedBox(height: AppSpacing.sm),
-                        Row(
-                          children: [
-                            SizedBox(
-                              width: chipWidth,
-                              child: _MetaChip(
-                                icon: Icons.toggle_on_outlined,
-                                label: _titleCase(item.availabilityStatus),
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            SizedBox(
-                              width: chipWidth,
-                              child: _MetaChip(
-                                icon: Icons.category_outlined,
-                                label: _categoryLabel(item.category),
-                              ),
-                            ),
-                          ],
+                        SizedBox(
+                          width: chipWidth,
+                          child: _MetaChip(
+                            icon: Icons.inventory_2_outlined,
+                            label: 'Qty ${item.quantity}',
+                          ),
+                        ),
+                        SizedBox(
+                          width: chipWidth,
+                          child: _MetaChip(
+                            icon: Icons.toggle_on_outlined,
+                            label: _titleCase(item.availabilityStatus),
+                          ),
+                        ),
+                        SizedBox(
+                          width: chipWidth,
+                          child: _MetaChip(
+                            icon: Icons.category_outlined,
+                            label: _categoryLabel(item.category),
+                          ),
                         ),
                       ],
                     );
@@ -592,25 +646,26 @@ class _DonationCard extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                         ),
-                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: deleteMode ? null : onEdit,
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    label: const Text('Edit'),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
+                if (item.availabilityStatus.toLowerCase() != 'deactivated')
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: deleteMode ? null : onEdit,
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: const Text('Edit'),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                       ),
                     ),
                   ),
-                ),
                 if (item.expiryDate != null) ...[
                   const SizedBox(height: AppSpacing.xs),
                   Text(
@@ -657,7 +712,13 @@ class _MetaChip extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: AppColors.mint),
           const SizedBox(width: 6),
-          Text(label),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );

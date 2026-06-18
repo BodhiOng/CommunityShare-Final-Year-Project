@@ -1,9 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import 'app/app_shell.dart';
 import 'app/user_role.dart';
 import 'app/user_role_resolver.dart';
+import 'deleted_account_page.dart';
 import 'landing_page.dart';
 import 'login_page.dart';
 import 'widgets/state_widgets.dart';
@@ -57,6 +59,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
     return resolved;
   }
 
+  Future<bool> _isDeletedUser(String uid) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance.collection('USER').doc(uid).get();
+      final status = snapshot.data()?['status']?.toString().trim().toLowerCase() ?? '';
+      return status == 'deleted';
+    } catch (error) {
+      debugPrint('Unable to read deleted status for $uid: $error');
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_showSplash) {
@@ -79,28 +92,43 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
 
         final user = snapshot.data!;
-        return FutureBuilder<UserRole>(
-          future: _roleFutureFor(user.uid),
-          builder: (context, roleSnapshot) {
-            if (roleSnapshot.connectionState == ConnectionState.waiting) {
+        return FutureBuilder<bool>(
+          future: _isDeletedUser(user.uid),
+          builder: (context, deletedSnapshot) {
+            if (deletedSnapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
                 body: AppLoadingState(message: 'Preparing your workspace...'),
               );
             }
 
-            if (roleSnapshot.hasError) {
-              return const Scaffold(
-                body: AppErrorState(
-                  message: 'Unable to load your role. Please try again.',
-                ),
-              );
+            if (deletedSnapshot.data == true) {
+              return const DeletedAccountPage();
             }
 
-            final role = roleSnapshot.data ?? UserRole.recipient;
-            final initialIndex = role == UserRole.donor ? 0 : 0;
-            return AppShell(
-              role: role,
-              initialIndex: initialIndex,
+            return FutureBuilder<UserRole>(
+              future: _roleFutureFor(user.uid),
+              builder: (context, roleSnapshot) {
+                if (roleSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Scaffold(
+                    body: AppLoadingState(message: 'Preparing your workspace...'),
+                  );
+                }
+
+                if (roleSnapshot.hasError) {
+                  return const Scaffold(
+                    body: AppErrorState(
+                      message: 'Unable to load your role. Please try again.',
+                    ),
+                  );
+                }
+
+                final role = roleSnapshot.data ?? UserRole.recipient;
+                final initialIndex = role == UserRole.donor ? 0 : 0;
+                return AppShell(
+                  role: role,
+                  initialIndex: initialIndex,
+                );
+              },
             );
           },
         );

@@ -8,11 +8,12 @@ import '../donor_incoming_requests_page.dart';
 import '../donor_listing_page.dart';
 import '../donor_select_handover_point_page.dart';
 import '../hub_handover_confirmation_page.dart';
-import '../landing_page.dart';
 import '../manage_hub_profile_page.dart';
 import '../recipient_browse_items_page.dart';
 import '../recipient_browse_community_hubs_page.dart';
 import '../recipient_request_status_page.dart';
+import '../admin_user_crud_page.dart';
+import '../admin_review_flagged_listings_page.dart';
 import '../shared_profile_page.dart';
 import '../widgets/app_shell_scaffold.dart';
 import '../widgets/state_widgets.dart';
@@ -76,18 +77,6 @@ class ShellTab {
 }
 
 List<ShellTab> _tabsForRole(UserRole role) {
-  final sharedHome = ShellTab(
-    title: 'Home',
-    label: 'Home',
-    icon: Icons.home_rounded,
-    builder: (context) => _HomeOverview(role: role),
-  );
-  final sharedNotifications = ShellTab(
-    title: 'Notifications',
-    label: 'Alerts',
-    icon: Icons.notifications_active_outlined,
-    builder: (context) => _NotificationsPage(role: role),
-  );
   final sharedProfile = ShellTab(
     title: 'Profile',
     label: 'Profile',
@@ -164,48 +153,20 @@ List<ShellTab> _tabsForRole(UserRole role) {
       ];
     case UserRole.admin:
       return [
-        sharedHome,
-        const ShellTab(
-          title: 'Admin Dashboard',
-          label: 'Dashboard',
-          icon: Icons.admin_panel_settings_outlined,
-          builder: _adminDashboard,
-        ),
         const ShellTab(
           title: 'User Management',
           label: 'Users',
           icon: Icons.groups_outlined,
-          builder: _adminUsers,
+          builder: _adminUserManagement,
         ),
-        sharedNotifications,
+        const ShellTab(
+          title: 'Review Flagged Listings',
+          label: 'Review',
+          icon: Icons.flag_outlined,
+          builder: _adminReviewFlaggedListings,
+        ),
         sharedProfile,
       ];
-  }
-}
-
-class _HomeOverview extends StatelessWidget {
-  const _HomeOverview({required this.role});
-
-  final UserRole role;
-
-  @override
-  Widget build(BuildContext context) {
-    return RoleLandingPage(role: role);
-  }
-}
-
-class _NotificationsPage extends StatelessWidget {
-  const _NotificationsPage({required this.role});
-
-  final UserRole role;
-
-  @override
-  Widget build(BuildContext context) {
-    return const AppEmptyState(
-      icon: Icons.notifications_none_rounded,
-      title: 'Notifications shell ready',
-      message: 'Alerts, approvals, request updates, and handover reminders will plug into this shared page.',
-    );
   }
 }
 
@@ -260,138 +221,10 @@ Widget _hubHandoverConfirmation(BuildContext context) =>
 
 Widget _hubManageProfile(BuildContext context) => const ManageHubProfilePage();
 
-Widget _adminDashboard(BuildContext context) => const _RoleWorkspace(
-      title: 'Administration',
-      points: [
-        'Platform summary metrics',
-        'Flagged entities review',
-        'Moderation shortcuts',
-      ],
-    );
+Widget _adminUserManagement(BuildContext context) => const AdminUserCrudPage();
 
-Widget _adminUsers(BuildContext context) => const _RoleWorkspace(
-      title: 'User management',
-      points: [
-        'Role assignments',
-        'Account review and deactivation',
-        'Category and access governance',
-      ],
-    );
-
-class _RoleWorkspace extends StatelessWidget {
-  const _RoleWorkspace({
-    required this.title,
-    required this.points,
-  });
-
-  final String title;
-  final List<String> points;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      children: [
-        _HeroPanel(
-          eyebrow: 'Skeleton',
-          title: title,
-          body: 'This page is intentionally lightweight so later feature work can plug into a stable shell.',
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Next blocks to build here',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                for (final point in points) ...[
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.only(top: 2),
-                        child: Icon(Icons.check_circle_outline, size: 18, color: AppColors.mint),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(child: Text(point)),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _HeroPanel extends StatelessWidget {
-  const _HeroPanel({
-    required this.eyebrow,
-    required this.title,
-    required this.body,
-  });
-
-  final String eyebrow;
-  final String title;
-  final String body;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        gradient: const LinearGradient(
-          colors: [AppColors.forest, AppColors.pine],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            eyebrow.toUpperCase(),
-            style: const TextStyle(
-              color: AppColors.sand,
-              letterSpacing: 1.4,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            title,
-            style: const TextStyle(
-              color: AppColors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            body,
-            style: const TextStyle(
-              color: AppColors.sand,
-              fontSize: 15,
-              height: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+Widget _adminReviewFlaggedListings(BuildContext context) =>
+    const AdminReviewFlaggedListingsPage();
 
 class _DonorRequestLauncherPage extends StatefulWidget {
   const _DonorRequestLauncherPage({
