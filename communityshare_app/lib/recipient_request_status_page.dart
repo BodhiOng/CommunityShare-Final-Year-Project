@@ -261,7 +261,9 @@ class _RecipientRequestStatusPageState extends State<RecipientRequestStatusPage>
                         for (var index = 0; index < snapshot.timeline.length; index++) ...[
                           _TimelineTile(
                             entry: snapshot.timeline[index],
+                            isFirst: index == 0,
                             isLast: index == snapshot.timeline.length - 1,
+                            isCurrent: index == snapshot.timeline.length - 1,
                           ),
                           if (index != snapshot.timeline.length - 1)
                             const SizedBox(height: AppSpacing.md),
@@ -599,53 +601,41 @@ class _SectionCard extends StatelessWidget {
 class _TimelineTile extends StatelessWidget {
   const _TimelineTile({
     required this.entry,
+    required this.isFirst,
     required this.isLast,
+    required this.isCurrent,
   });
 
   final _StatusHistoryEntry entry;
+  final bool isFirst;
   final bool isLast;
+  final bool isCurrent;
 
   @override
   Widget build(BuildContext context) {
-    final color = requestStatusColor(entry.status);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Column(
-          children: [
-            Container(
-              width: 12,
-              height: 12,
-              margin: const EdgeInsets.only(top: 4),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color,
-              ),
-            ),
-            if (!isLast)
-              Container(
-                width: 2,
-                height: 54,
-                color: color.withValues(alpha: 0.35),
-              ),
-          ],
-        ),
-        const SizedBox(width: AppSpacing.md),
         Expanded(
           child: Container(
             padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              border: Border.all(color: color.withValues(alpha: 0.28)),
-              color: AppColors.forest.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(
+                color: isCurrent ? AppColors.white : AppColors.slate.withValues(alpha: 0.5),
+                width: isCurrent ? 1.8 : 1,
+              ),
+              color: isCurrent
+                  ? AppColors.pine
+                  : AppColors.slate.withValues(alpha: 0.18),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   titleCaseLabel(entry.status),
-                  style: const TextStyle(
-                    color: AppColors.white,
+                  style: TextStyle(
+                    color: isCurrent ? AppColors.white : AppColors.sand,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -654,14 +644,18 @@ class _TimelineTile extends StatelessWidget {
                   entry.changedAt == null
                       ? 'Time not available'
                       : DateFormat('MMM d, yyyy h:mm a').format(entry.changedAt!),
-                  style: const TextStyle(color: AppColors.mist),
+                  style: TextStyle(
+                    color: isCurrent ? AppColors.sand : AppColors.slate,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   entry.changedByUserId.isEmpty
                       ? 'Updated by system'
                       : 'Updated by ${entry.changedByUserId}',
-                  style: const TextStyle(color: AppColors.slate),
+                  style: TextStyle(
+                    color: isCurrent ? AppColors.mist : AppColors.slate,
+                  ),
                 ),
               ],
             ),

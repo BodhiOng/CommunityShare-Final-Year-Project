@@ -491,6 +491,9 @@ String titleCaseLabel(String value) {
   if (value.trim().isEmpty) {
     return 'Unknown';
   }
+  if (value.toLowerCase() == 'completed') {
+    return 'Item Handed To Intended Recipient';
+  }
   return value
       .split('_')
       .map((part) {
@@ -506,11 +509,14 @@ Color requestStatusColor(String status) {
   switch (status.toLowerCase()) {
     case 'approved':
       return AppColors.mint;
+    case 'reserved':
+      return AppColors.sun;
     case 'delivering':
     case 'delivering_to_hub':
     case 'delivering_to_recipient':
       return AppColors.sun;
     case 'item_at_community_hub':
+    case 'claimed':
       return AppColors.pine;
     case 'handover_scheduled':
       return AppColors.sun;

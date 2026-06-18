@@ -7,6 +7,7 @@ import '../donor_donation_status_tracking_page.dart';
 import '../donor_incoming_requests_page.dart';
 import '../donor_listing_page.dart';
 import '../donor_select_handover_point_page.dart';
+import '../hub_handover_confirmation_page.dart';
 import '../landing_page.dart';
 import '../manage_hub_profile_page.dart';
 import '../recipient_browse_items_page.dart';
@@ -141,6 +142,12 @@ List<ShellTab> _tabsForRole(UserRole role) {
     case UserRole.hub:
       return [
         const ShellTab(
+          title: 'Handover Confirmation',
+          label: 'Handover',
+          icon: Icons.inventory_2_outlined,
+          builder: _hubHandoverConfirmation,
+        ),
+        const ShellTab(
           title: 'Manage Hub Profile',
           label: 'Hub',
           icon: Icons.storefront_outlined,
@@ -237,6 +244,9 @@ Widget _recipientBrowse(BuildContext context) => const RecipientBrowseItemsPage(
 
 Widget _recipientRequestStatus(BuildContext context) =>
     const _RecipientRequestStatusLauncherPage();
+
+Widget _hubHandoverConfirmation(BuildContext context) =>
+    const HubHandoverConfirmationPage();
 
 Widget _hubManageProfile(BuildContext context) => const ManageHubProfilePage();
 
