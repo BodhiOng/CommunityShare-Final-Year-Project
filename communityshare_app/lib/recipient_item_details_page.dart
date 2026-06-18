@@ -29,6 +29,8 @@ class RecipientItemDetailsPage extends StatefulWidget {
       _RecipientItemDetailsPageState();
 }
 
+enum _ItemDetailsMenuAction { report }
+
 class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
   static final Random _random = Random.secure();
 
@@ -36,8 +38,10 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final TextEditingController _requestNoteController = TextEditingController();
   final TextEditingController _manualHubController = TextEditingController();
+  final TextEditingController _reportReasonController = TextEditingController();
 
   bool _isSubmitting = false;
+  bool _isSubmittingReport = false;
   bool _isLoadingDonor = true;
   bool _isLoadingHubs = true;
   bool _isLoadingRequest = true;
@@ -58,6 +62,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
   void dispose() {
     _requestNoteController.dispose();
     _manualHubController.dispose();
+    _reportReasonController.dispose();
     super.dispose();
   }
 
@@ -65,7 +70,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     try {
       final userDoc = await _firestore.collection('USER').doc(widget.item.donorId).get();
       final legacyDoc =
-          await _firestore.collection('users').doc(widget.item.donorId).get();
+          await _firestore.collection('USER').doc(widget.item.donorId).get();
       final data = <String, dynamic>{
         ...?legacyDoc.data(),
         ...?userDoc.data(),
@@ -293,6 +298,38 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Item Details'),
+        actions: [
+          PopupMenuButton<_ItemDetailsMenuAction>(
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (action) {
+              switch (action) {
+                case _ItemDetailsMenuAction.report:
+                  if (!_isSubmittingReport) {
+                    _showReportSheet();
+                  }
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem<_ItemDetailsMenuAction>(
+                value: _ItemDetailsMenuAction.report,
+                child: Row(
+                  children: [
+                    const Icon(Icons.flag_outlined, color: AppColors.coral),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(
+                      'Report item/user',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.coral,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.only(bottom: 110),
@@ -325,7 +362,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                   runSpacing: AppSpacing.sm,
                   children: [
                     _DetailPill(
-                      label: item.category,
+                      label: titleCaseLabel(item.category),
                       color: AppColors.pine,
                     ),
                     _DetailPill(
@@ -565,7 +602,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.forest,
+      backgroundColor: AppColors.night,
       builder: (context) {
         return Padding(
           padding: EdgeInsets.fromLTRB(
@@ -697,11 +734,193 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     );
   }
 
+  Future<void> _showReportSheet() async {
+    _reportReasonController.clear();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.forest,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.lg,
+            MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setSheetState) {
+              Future<void> submit() async {
+                final success = await _submitReport();
+                if (success && context.mounted) {
+                  Navigator.of(context).pop();
+                } else if (context.mounted) {
+                  setSheetState(() {});
+                }
+              }
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: AppColors.coral.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  border: Border.all(color: AppColors.coral),
+                ),
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Report ${widget.item.title}',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.coral,
+                            ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      const Text(
+                        'Tell us why this listing is offensive, harmful, or inappropriate.',
+                        style: TextStyle(color: AppColors.mist, height: 1.5),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      TextField(
+                        controller: _reportReasonController,
+                        maxLines: 5,
+                        maxLength: 300,
+                        decoration: InputDecoration(
+                          labelText: 'Reason for report',
+                          hintText: 'Type the reason for this report.',
+                          fillColor: AppColors.night,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                            borderSide: BorderSide(
+                              color: AppColors.coral.withValues(alpha: 0.45),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                            borderSide: const BorderSide(
+                              color: AppColors.coral,
+                              width: 1.4,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _isSubmittingReport ? null : submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.coral,
+                            foregroundColor: AppColors.white,
+                          ),
+                          icon: _isSubmittingReport
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.flag_outlined),
+                          label: Text(
+                            _isSubmittingReport
+                                ? 'Submitting report...'
+                                : 'Submit report',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool> _submitReport() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You need to sign in before reporting an item.')),
+      );
+      return false;
+    }
+
+    if (user.uid == widget.item.donorId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You cannot report your own listing.')),
+      );
+      return false;
+    }
+
+    final reason = _reportReasonController.text.trim();
+    if (reason.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a reason for the report.')),
+      );
+      return false;
+    }
+
+    setState(() {
+      _isSubmittingReport = true;
+    });
+
+    try {
+      final reportId = _newReportId();
+      await _firestore.collection('REPORT').doc(reportId).set({
+        'reportId': reportId,
+        'reporterUserId': user.uid,
+        'reportedUserId': widget.item.donorId,
+        'itemId': widget.item.itemId,
+        'reason': reason,
+        'reportStatus': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) {
+        return false;
+      }
+
+      setState(() {
+        _isSubmittingReport = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Report submitted successfully.')),
+      );
+      return true;
+    } catch (error) {
+      if (!mounted) {
+        return false;
+      }
+
+      setState(() {
+        _isSubmittingReport = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to submit report: $error')),
+      );
+      return false;
+    }
+  }
+
   String _formatDate(DateTime? value) {
     if (value == null) {
       return 'Not set';
     }
     return DateFormat('MMM d, yyyy').format(value);
+  }
+
+  String _newReportId() {
+    final digits = List.generate(13, (_) => _random.nextInt(10)).join();
+    return 'report_$digits';
   }
 
   String get _donorDisplayName {

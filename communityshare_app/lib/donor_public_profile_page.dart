@@ -45,7 +45,7 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
       final userDoc =
           await _firestore.collection('USER').doc(widget.donorId).get();
       final legacyDoc =
-          await _firestore.collection('users').doc(widget.donorId).get();
+          await _firestore.collection('USER').doc(widget.donorId).get();
       final data = <String, dynamic>{
         ...?legacyDoc.data(),
         ...?userDoc.data(),

@@ -830,7 +830,7 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
   ) async {
     final result = <String, Map<String, dynamic>>{};
     for (final id in ids) {
-      final usersDoc = await _firestore.collection('users').doc(id).get();
+      final usersDoc = await _firestore.collection('USER').doc(id).get();
       final userDoc = await _firestore.collection('USER').doc(id).get();
       result[id] = {
         ...?usersDoc.data(),

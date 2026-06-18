@@ -151,7 +151,7 @@ class _RecipientRequestStatusPageState extends State<RecipientRequestStatusPage>
       return const <String, dynamic>{};
     }
 
-    final legacyDoc = await _firestore.collection('users').doc(userId).get();
+    final legacyDoc = await _firestore.collection('USER').doc(userId).get();
     final userDoc = await _firestore.collection('USER').doc(userId).get();
     return {
       ...?legacyDoc.data(),
@@ -166,7 +166,7 @@ class _RecipientRequestStatusPageState extends State<RecipientRequestStatusPage>
       return hubData;
     }
 
-    final legacyDoc = await _firestore.collection('users').doc(hubId).get();
+    final legacyDoc = await _firestore.collection('USER').doc(hubId).get();
     final userDoc = await _firestore.collection('USER').doc(hubId).get();
     return {
       ...?legacyDoc.data(),

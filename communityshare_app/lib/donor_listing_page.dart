@@ -13,9 +13,9 @@ import 'utils/image_utils.dart';
 
 final Random _idRandom = Random.secure();
 
-String _newNineDigitId(String prefix) {
-  final value = 100000000 + _idRandom.nextInt(900000000);
-  return '${prefix}_$value';
+String _newThirteenDigitId(String prefix) {
+  final digits = List.generate(13, (_) => _idRandom.nextInt(10)).join();
+  return '${prefix}_$digits';
 }
 
 class DonorListingPage extends StatefulWidget {
@@ -960,8 +960,8 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
         throw Exception('You can only edit your own donation listings');
       }
 
-      final docId = widget.item?.docId ?? _newNineDigitId('item');
-      final itemId = widget.item?.itemId ?? _newNineDigitId('item');
+      final docId = widget.item?.docId ?? _newThirteenDigitId('item');
+      final itemId = widget.item?.itemId ?? _newThirteenDigitId('item');
       final expiryDate =
           _selectedCategoryId == 'consumables' ? _expiryDate : null;
 

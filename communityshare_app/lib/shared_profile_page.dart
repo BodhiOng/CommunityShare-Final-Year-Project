@@ -146,7 +146,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
 
     try {
       final userDoc = await _firestore.collection('USER').doc(user.uid).get();
-      final legacyDoc = await _firestore.collection('users').doc(user.uid).get();
+      final legacyDoc = await _firestore.collection('USER').doc(user.uid).get();
 
       final data = <String, dynamic>{
         ...?legacyDoc.data(),
@@ -677,7 +677,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
           .doc(user.uid)
           .set(payload, SetOptions(merge: true));
 
-      await _firestore.collection('users').doc(user.uid).set({
+      await _firestore.collection('USER').doc(user.uid).set({
         'fullName': _fullNameController.text.trim(),
         'username': _fullNameController.text.trim(),
         'email': user.email ?? '',
