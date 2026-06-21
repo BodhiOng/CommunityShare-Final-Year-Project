@@ -6,7 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'constants.dart';
 import 'admin_profile_page.dart';
-import 'admin_user_management_page.dart';
+import 'admin_user_crud_page.dart';
 import 'admin_product_moderation_page.dart';
 import 'admin_order_management_page.dart';
 import 'utils/page_transitions.dart';
@@ -138,7 +138,7 @@ class _AdminCustomerSupportPageState extends State<AdminCustomerSupportPage> {
       case 0:
         Navigator.pushReplacement(
           context,
-          DarkPageReplaceRoute(page: const AdminUserManagementPage()),
+          DarkPageReplaceRoute(page: const AdminUserCrudPage()),
         );
         break;
       case 1:

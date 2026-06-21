@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'constants.dart';
 import 'utils/image_utils.dart';
 import 'admin_profile_page.dart';
-import 'admin_user_management_page.dart';
+import 'admin_user_crud_page.dart';
 import 'admin_order_management_page.dart';
 import 'admin_customer_support_page.dart';
 import 'utils/page_transitions.dart';
@@ -21,6 +21,7 @@ class AdminProductModerationPage extends StatefulWidget {
 
 class _AdminProductModerationPageState
     extends State<AdminProductModerationPage> {
+  static const int _reportsPerPage = 8;
   int _selectedIndex =
       1; // 0 for User Management, 1 for Product Moderation, 2 for Order Moderation, 3 for Customer Support, 4 for Profile
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -30,6 +31,7 @@ class _AdminProductModerationPageState
   bool _isLoading = true;
   String _searchQuery = '';
   String _selectedStatus = 'All';
+  int _currentPage = 0;
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -54,8 +56,8 @@ class _AdminProductModerationPageState
     try {
       final QuerySnapshot reportsSnapshot =
           await _firestore
-              .collection('reports')
-              .orderBy('timestamp', descending: true)
+              .collection('REPORT')
+              .orderBy('createdAt', descending: true)
               .get();
 
       List<Map<String, dynamic>> reports = [];
@@ -66,8 +68,8 @@ class _AdminProductModerationPageState
         // Get product details
         DocumentSnapshot productDoc =
             await _firestore
-                .collection('products')
-                .doc(data['productId'] as String)
+                .collection('ITEM_LISTING')
+                .doc(data['itemId'] as String)
                 .get();
 
         Map<String, dynamic>? productData;
@@ -78,8 +80,8 @@ class _AdminProductModerationPageState
         // Get reporter details
         DocumentSnapshot reporterDoc =
             await _firestore
-                .collection('users')
-                .doc(data['reporterId'] as String)
+                .collection('USER')
+                .doc(data['reporterUserId'] as String)
                 .get();
 
         Map<String, dynamic>? reporterData;
@@ -90,8 +92,8 @@ class _AdminProductModerationPageState
         // Get seller details
         DocumentSnapshot sellerDoc =
             await _firestore
-                .collection('users')
-                .doc(data['sellerId'] as String)
+                .collection('USER')
+                .doc(data['reportedUserId'] as String)
                 .get();
 
         Map<String, dynamic>? sellerData;
@@ -102,18 +104,18 @@ class _AdminProductModerationPageState
         // Convert Firestore data to app format
         reports.add({
           'id': doc.id,
-          'productId': data['productId'] as String,
-          'productName': productData?['name'] ?? 'Product Unavailable',
-          'productImage': productData?['imageUrl'] ?? '',
-          'productPrice': productData?['price'] ?? 0.0,
-          'reporterId': data['reporterId'] as String,
-          'reporterName': reporterData?['username'] ?? 'Unknown User',
-          'sellerId': data['sellerId'] as String,
-          'sellerName': sellerData?['username'] ?? 'Unknown Seller',
+          'itemId': data['itemId'] as String,
+          'productName': productData?['title'] ?? 'Item Unavailable',
+          'productImage': productData?['photoUrl'] ?? '',
+          'productPrice': 0.0,
+          'reporterId': data['reporterUserId'] as String,
+          'reporterName': reporterData?['fullName'] ?? 'Unknown User',
+          'sellerId': data['reportedUserId'] as String,
+          'sellerName': sellerData?['fullName'] ?? 'Unknown User',
           'reason': data['reason'] as String,
-          'description': data['description'] as String,
-          'timestamp': (data['timestamp'] as Timestamp).toDate(),
-          'status': data['status'] as String,
+          'description': '',
+          'timestamp': (data['createdAt'] as Timestamp).toDate(),
+          'status': data['reportStatus'] as String,
         });
       }
 
@@ -121,6 +123,7 @@ class _AdminProductModerationPageState
         _reports = reports;
         _filteredReports = reports;
         _isLoading = false;
+        _currentPage = 0;
       });
     } catch (e) {
       debugPrint('Error fetching reports: $e');
@@ -141,6 +144,9 @@ class _AdminProductModerationPageState
                 ) ||
                 report['sellerName'].toString().toLowerCase().contains(
                   _searchQuery.toLowerCase(),
+                ) ||
+                report['reporterName'].toString().toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
                 );
 
             final matchesStatus =
@@ -150,6 +156,36 @@ class _AdminProductModerationPageState
 
             return matchesSearch && matchesStatus;
           }).toList();
+      _currentPage = 0;
+    });
+  }
+
+  int get _totalPages {
+    if (_filteredReports.isEmpty) {
+      return 0;
+    }
+    return (_filteredReports.length / _reportsPerPage).ceil();
+  }
+
+  List<Map<String, dynamic>> get _pagedReports {
+    if (_filteredReports.isEmpty) {
+      return const [];
+    }
+
+    final start = _currentPage * _reportsPerPage;
+    final end = (start + _reportsPerPage)
+        .clamp(0, _filteredReports.length)
+        .toInt();
+    return _filteredReports.sublist(start, end);
+  }
+
+  void _goToPage(int page) {
+    if (page < 0 || page >= _totalPages) {
+      return;
+    }
+
+    setState(() {
+      _currentPage = page;
     });
   }
 
@@ -166,7 +202,7 @@ class _AdminProductModerationPageState
           (context) => AlertDialog(
             backgroundColor: AppColors.deepSlateGray,
             title: Text(
-              'Report Details',
+              'Listing Report Details',
               style: const TextStyle(color: Colors.white),
             ),
             content: SingleChildScrollView(
@@ -203,15 +239,20 @@ class _AdminProductModerationPageState
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _detailRow('Product', report['productName'] as String),
+                  _detailRow('Listing', report['productName'] as String),
                   _detailRow(
                     'Price',
                     'RM ${report['productPrice'].toStringAsFixed(2)}',
                   ),
-                  _detailRow('Seller', report['sellerName'] as String),
+                  _detailRow('Reported User', report['sellerName'] as String),
                   _detailRow('Reported By', report['reporterName'] as String),
                   _detailRow('Reason', report['reason'] as String),
-                  _detailRow('Description', report['description'] as String),
+                  _detailRow(
+                    'Description',
+                    (report['description'] as String).isEmpty
+                        ? 'Not provided'
+                        : report['description'] as String,
+                  ),
                   _detailRow('Status', report['status'] as String),
                   _detailRow(
                     'Report Date',
@@ -285,7 +326,7 @@ class _AdminProductModerationPageState
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'What action would you like to take for this reported product?',
+                    'What action would you like to take for this reported listing?',
                     style: const TextStyle(color: Colors.white),
                   ),
                   const SizedBox(height: 16),
@@ -295,11 +336,11 @@ class _AdminProductModerationPageState
                       color: AppColors.mutedTeal,
                     ),
                     title: const Text(
-                      'Approve Product',
+                      'Dismiss Report',
                       style: TextStyle(color: Colors.white),
                     ),
                     subtitle: const Text(
-                      'Dismiss the report and keep the product',
+                      'Dismiss the report and keep the listing active',
                       style: TextStyle(color: Colors.grey),
                     ),
                     onTap: () {
@@ -364,7 +405,7 @@ class _AdminProductModerationPageState
           (context) => AlertDialog(
             backgroundColor: AppColors.deepSlateGray,
             title: Text(
-              'Delete Product',
+              'Delete Listing',
               style: const TextStyle(color: Colors.white),
             ),
             content: Text(
@@ -397,8 +438,8 @@ class _AdminProductModerationPageState
   // Update report status
   Future<void> _updateReportStatus(String reportId, String status) async {
     try {
-      await _firestore.collection('reports').doc(reportId).update({
-        'status': status,
+      await _firestore.collection('REPORT').doc(reportId).update({
+        'reportStatus': status,
       });
 
       // Refresh reports list
@@ -408,7 +449,7 @@ class _AdminProductModerationPageState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Report status updated to $status'),
+          content: Text('Report status updated to $status'),
             backgroundColor: AppColors.mutedTeal,
           ),
         );
@@ -429,20 +470,20 @@ class _AdminProductModerationPageState
   // Delete product and update report
   Future<void> _deleteProduct(Map<String, dynamic> report) async {
     try {
-      final String productId = report['productId'] as String;
+      final String itemId = report['itemId'] as String;
 
       // Batch for all delete operations
       WriteBatch batch = _firestore.batch();
 
       // 1. Delete the product
-      final productRef = _firestore.collection('products').doc(productId);
+      final productRef = _firestore.collection('ITEM_LISTING').doc(itemId);
       batch.delete(productRef);
 
       // 2. Delete all reports related to this product
       final relatedReports =
           await _firestore
-              .collection('reports')
-              .where('productId', isEqualTo: productId)
+              .collection('REPORT')
+              .where('itemId', isEqualTo: itemId)
               .get();
 
       for (var doc in relatedReports.docs) {
@@ -453,7 +494,7 @@ class _AdminProductModerationPageState
       final relatedOrders =
           await _firestore
               .collection('orders')
-              .where('productId', isEqualTo: productId)
+              .where('productId', isEqualTo: itemId)
               .get();
 
       for (var doc in relatedOrders.docs) {
@@ -464,7 +505,7 @@ class _AdminProductModerationPageState
       final relatedReviews =
           await _firestore
               .collection('reviews')
-              .where('productId', isEqualTo: productId)
+              .where('productId', isEqualTo: itemId)
               .get();
 
       for (var doc in relatedReviews.docs) {
@@ -525,7 +566,7 @@ class _AdminProductModerationPageState
               ListTile(
                 leading: Icon(Icons.check_circle, color: AppColors.mutedTeal),
                 title: const Text(
-                  'Approve Product',
+                  'Dismiss Report',
                   style: TextStyle(color: Colors.white),
                 ),
                 onTap: () {
@@ -547,7 +588,7 @@ class _AdminProductModerationPageState
               ListTile(
                 leading: Icon(Icons.delete_outline, color: AppColors.warmCoral),
                 title: const Text(
-                  'Delete Product',
+                  'Delete Listing',
                   style: TextStyle(color: AppColors.warmCoral),
                 ),
                 onTap: () {
@@ -573,7 +614,7 @@ class _AdminProductModerationPageState
         // Navigate to User Management page
         Navigator.pushReplacement(
           context,
-          DarkPageReplaceRoute(page: const AdminUserManagementPage()),
+          DarkPageReplaceRoute(page: const AdminUserCrudPage()),
         );
         break;
       case 1:
@@ -610,7 +651,7 @@ class _AdminProductModerationPageState
       appBar: AppBar(
         backgroundColor: AppColors.deepSlateGray,
         title: const Text(
-          'Product Moderation',
+          'Flagged Listings',
           style: TextStyle(color: Colors.white),
         ),
         actions: [
@@ -632,7 +673,7 @@ class _AdminProductModerationPageState
                   controller: _searchController,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    hintText: 'Search products...',
+                    hintText: 'Search listings...',
                     hintStyle: TextStyle(color: AppColors.coolGray),
                     prefixIcon: Icon(Icons.search, color: AppColors.coolGray),
                     filled: true,
@@ -685,7 +726,7 @@ class _AdminProductModerationPageState
             child: Row(
               children: [
                 Text(
-                  'Flagged Products: ${_filteredReports.length}',
+                      'Flagged Listings: ${_filteredReports.length}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -707,106 +748,122 @@ class _AdminProductModerationPageState
                     : _filteredReports.isEmpty
                     ? Center(
                       child: Text(
-                        'No flagged products found',
+                        'No flagged listings found',
                         style: TextStyle(color: AppColors.coolGray),
                       ),
                     )
-                    : ListView.builder(
-                      itemCount: _filteredReports.length,
-                      itemBuilder: (context, index) {
-                        final report = _filteredReports[index];
-                        return Card(
-                          margin: const EdgeInsets.symmetric(
-                            vertical: 4.0,
-                            horizontal: 8.0,
-                          ),
-                          color: AppColors.deepSlateGray,
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12.0,
-                            ),
-                            leading: Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                color: AppColors.mutedTeal.withValues(
-                                  alpha: 0.2,
+                    : Column(
+                      children: [
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: _pagedReports.length,
+                            itemBuilder: (context, index) {
+                              final report = _pagedReports[index];
+                              return Card(
+                                margin: const EdgeInsets.symmetric(
+                                  vertical: 4.0,
+                                  horizontal: 8.0,
                                 ),
-                              ),
-                              child:
-                                  report['productImage'] != null &&
-                                          (report['productImage'] as String)
-                                              .isNotEmpty
-                                      ? ImageUtils.base64ToImage(
-                                        report['productImage'] as String,
-                                        width: 50,
-                                        height: 50,
-                                        fit: BoxFit.cover,
-                                        errorWidget: const Icon(
-                                          Icons.image_not_supported,
-                                          color: AppColors.mutedTeal,
-                                          size: 24,
-                                        ),
-                                      )
-                                      : const Icon(
-                                        Icons.image_not_supported,
-                                        color: AppColors.mutedTeal,
-                                        size: 24,
+                                color: AppColors.deepSlateGray,
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12.0,
+                                  ),
+                                  leading: Container(
+                                    width: 50,
+                                    height: 50,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.mutedTeal.withValues(
+                                        alpha: 0.2,
                                       ),
-                            ),
-                            title: Text(
-                              report['productName'] as String,
-                              style: const TextStyle(color: Colors.white),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
+                                    ),
+                                    child:
+                                        report['productImage'] != null &&
+                                                (report['productImage']
+                                                        as String)
+                                                    .isNotEmpty
+                                            ? ImageUtils.base64ToImage(
+                                              report['productImage']
+                                                  as String,
+                                              width: 50,
+                                              height: 50,
+                                              fit: BoxFit.cover,
+                                              errorWidget: const Icon(
+                                                Icons.image_not_supported,
+                                                color: AppColors.mutedTeal,
+                                                size: 24,
+                                              ),
+                                            )
+                                            : const Icon(
+                                              Icons.image_not_supported,
+                                              color: AppColors.mutedTeal,
+                                              size: 24,
+                                            ),
+                                  ),
+                                  title: Text(
+                                    report['productName'] as String,
+                                    style: const TextStyle(color: Colors.white),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
                                   'Reason: ${report['reason']}',
-                                  style: TextStyle(color: AppColors.coolGray),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                ),
-                                Text(
-                                  'Seller: ${report['sellerName']}',
-                                  style: TextStyle(color: AppColors.coolGray),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                ),
-                                Wrap(
-                                  spacing: 8,
-                                  children: [
-                                    _buildStatusBadge(
-                                      report['status'] as String,
-                                    ),
-                                    Text(
-                                      _formatDate(
-                                        report['timestamp'] as DateTime,
+                                        style: TextStyle(
+                                          color: AppColors.coolGray,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
                                       ),
-                                      style: TextStyle(
-                                        color: AppColors.coolGray,
-                                        fontSize: 12,
+                                      Text(
+                                  'Reported User: ${report['sellerName']}',
+                                        style: TextStyle(
+                                          color: AppColors.coolGray,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
                                       ),
-                                      overflow: TextOverflow.ellipsis,
+                                      Wrap(
+                                        spacing: 8,
+                                        children: [
+                                          _buildStatusBadge(
+                                            report['status'] as String,
+                                          ),
+                                          Text(
+                                            _formatDate(
+                                              report['timestamp'] as DateTime,
+                                            ),
+                                            style: TextStyle(
+                                              color: AppColors.coolGray,
+                                              fontSize: 12,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(
+                                      Icons.more_vert,
+                                      color: Colors.white,
                                     ),
-                                  ],
+                                    onPressed:
+                                        () => _showReportActionsMenu(
+                                          context,
+                                          report,
+                                        ),
+                                  ),
+                                  onTap: () => _showReportDetailsDialog(report),
                                 ),
-                              ],
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(
-                                Icons.more_vert,
-                                color: Colors.white,
-                              ),
-                              onPressed:
-                                  () => _showReportActionsMenu(context, report),
-                            ),
-                            onTap: () => _showReportDetailsDialog(report),
+                              );
+                            },
                           ),
-                        );
-                      },
+                        ),
+                      ],
                     ),
           ),
         ],

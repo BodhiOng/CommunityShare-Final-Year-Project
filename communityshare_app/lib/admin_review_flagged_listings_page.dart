@@ -16,16 +16,30 @@ class AdminReviewFlaggedListingsPage extends StatefulWidget {
 
 class _AdminReviewFlaggedListingsPageState
     extends State<AdminReviewFlaggedListingsPage> {
+  static const int _reportsPerPage = 8;
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final TextEditingController _searchController = TextEditingController();
 
   bool _isLoading = true;
   String _errorMessage = '';
   List<FlaggedListingReportRecord> _reports = const [];
+  List<FlaggedListingReportRecord> _filteredReports = const [];
+  String _selectedStatus = 'all';
+  int _currentPage = 0;
 
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(_applyFilters);
     _loadReports();
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_applyFilters);
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadReports() async {
@@ -81,8 +95,7 @@ class _AdminReviewFlaggedListingsPageState
                 : 'Listing unavailable',
             listingCategory:
                 listingData?['category']?.toString().trim() ?? 'others',
-            listingPhotoUrl:
-                listingData?['photoUrl']?.toString().trim() ?? '',
+            listingPhotoUrl: listingData?['photoUrl']?.toString().trim() ?? '',
             listingAvailabilityStatus:
                 listingData?['availabilityStatus']?.toString().trim() ??
                     'unknown',
@@ -97,8 +110,11 @@ class _AdminReviewFlaggedListingsPageState
 
       setState(() {
         _reports = records;
+        _filteredReports = records;
         _isLoading = false;
+        _currentPage = 0;
       });
+      _applyFilters();
     } catch (error) {
       if (!mounted) {
         return;
@@ -111,18 +127,67 @@ class _AdminReviewFlaggedListingsPageState
     }
   }
 
+  void _applyFilters() {
+    final query = _searchController.text.trim().toLowerCase();
+
+    setState(() {
+      _filteredReports = _reports.where((report) {
+        final matchesQuery =
+            query.isEmpty ||
+            report.listingTitle.toLowerCase().contains(query) ||
+            report.reason.toLowerCase().contains(query) ||
+            report.reporterName.toLowerCase().contains(query) ||
+            report.reportedUserId.toLowerCase().contains(query);
+
+        final matchesStatus =
+            _selectedStatus == 'all' ||
+            report.reportStatus.toLowerCase() == _selectedStatus;
+
+        return matchesQuery && matchesStatus;
+      }).toList(growable: false);
+      _currentPage = 0;
+    });
+  }
+
+  int get _totalPages {
+    if (_filteredReports.isEmpty) {
+      return 0;
+    }
+    return (_filteredReports.length / _reportsPerPage).ceil();
+  }
+
+  List<FlaggedListingReportRecord> get _pagedReports {
+    if (_filteredReports.isEmpty) {
+      return const [];
+    }
+
+    final start = _currentPage * _reportsPerPage;
+    final end = (start + _reportsPerPage)
+        .clamp(0, _filteredReports.length)
+        .toInt();
+    return _filteredReports.sublist(start, end);
+  }
+
+  void _goToPage(int page) {
+    if (page < 0 || page >= _totalPages) {
+      return;
+    }
+
+    setState(() {
+      _currentPage = page;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Review Flagged Listings')),
         body: const AppLoadingState(message: 'Loading flagged listings...'),
       );
     }
 
     if (_errorMessage.isNotEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Review Flagged Listings')),
         body: AppErrorState(
           message: _errorMessage,
           onRetry: _loadReports,
@@ -132,7 +197,6 @@ class _AdminReviewFlaggedListingsPageState
 
     if (_reports.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Review Flagged Listings')),
         body: const AppEmptyState(
           icon: Icons.flag_outlined,
           title: 'No flagged listings',
@@ -142,40 +206,137 @@ class _AdminReviewFlaggedListingsPageState
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Review Flagged Listings'),
-      ),
       body: RefreshIndicator(
         color: AppColors.mint,
         onRefresh: _loadReports,
-        child: ListView.separated(
+        child: ListView(
           padding: const EdgeInsets.all(AppSpacing.lg),
-          itemCount: _reports.length,
-          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
-          itemBuilder: (context, index) {
-            final report = _reports[index];
-            return Card(
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(AppSpacing.md),
-                title: Text(report.listingTitle),
-                subtitle: Text(
-                  '${_titleCaseLabel(report.listingCategory)} • ${_titleCaseLabel(report.reportStatus)}',
-                ),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () async {
-                  await Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          AdminDeactivateListingPage(report: report),
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                labelText: 'Search flagged listings',
+                hintText: 'Search by listing, reason, reporter, or user ID',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () => _searchController.clear(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            SizedBox(
+              height: 44,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: 4,
+                separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.sm),
+                itemBuilder: (context, index) {
+                  const statuses = [
+                    'all',
+                    'pending',
+                    'investigating',
+                    'dismissed',
+                  ];
+                  final status = statuses[index];
+                  final selected = _selectedStatus == status;
+                  return FilterChip(
+                    selected: selected,
+                    showCheckmark: false,
+                    label: Text(
+                      status == 'all'
+                          ? 'All Statuses'
+                          : _titleCaseLabel(status),
+                    ),
+                    onSelected: (_) {
+                      _selectedStatus = status;
+                      _applyFilters();
+                    },
+                    backgroundColor: AppColors.forest,
+                    selectedColor: AppColors.mint.withValues(alpha: 0.18),
+                    labelStyle: TextStyle(
+                      color: selected ? AppColors.mint : AppColors.sand,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    side: BorderSide(
+                      color: selected ? AppColors.mint : AppColors.pine,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
                     ),
                   );
-                  if (mounted) {
-                    await _loadReports();
-                  }
                 },
               ),
-            );
-          },
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              '${_filteredReports.length} flagged ${_filteredReports.length == 1 ? 'listing' : 'listings'}',
+              style: const TextStyle(color: AppColors.sand),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            if (_filteredReports.isEmpty)
+              const AppEmptyState(
+                icon: Icons.search_off_rounded,
+                title: 'No matching flagged listings',
+                message: 'Try a different search term or reset the status filter.',
+              )
+            else ...[
+              ..._pagedReports.map(
+                (report) => Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  child: Card(
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(AppSpacing.md),
+                      title: Text(report.listingTitle),
+                      subtitle: Text(
+                        '${_titleCaseLabel(report.listingCategory)} | ${_titleCaseLabel(report.reportStatus)} | ${report.createdAtLabel}',
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) =>
+                                AdminDeactivateListingPage(report: report),
+                          ),
+                        );
+                        if (mounted) {
+                          await _loadReports();
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              if (_totalPages > 1)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Page ${_currentPage + 1} of $_totalPages',
+                      style: const TextStyle(color: AppColors.sand),
+                    ),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: _currentPage > 0
+                              ? () => _goToPage(_currentPage - 1)
+                              : null,
+                          icon: const Icon(Icons.chevron_left),
+                        ),
+                        IconButton(
+                          onPressed: _currentPage + 1 < _totalPages
+                              ? () => _goToPage(_currentPage + 1)
+                              : null,
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+            ],
+          ],
         ),
       ),
     );
@@ -218,9 +379,10 @@ class _AdminReviewFlaggedListingsPageState
         .split(RegExp(r'[_\s]+'))
         .where((part) => part.trim().isNotEmpty)
         .map((part) {
-      final lower = part.toLowerCase();
-      return '${lower[0].toUpperCase()}${lower.substring(1)}';
-    }).join(' ');
+          final lower = part.toLowerCase();
+          return '${lower[0].toUpperCase()}${lower.substring(1)}';
+        })
+        .join(' ');
   }
 }
 
@@ -259,6 +421,6 @@ class FlaggedListingReportRecord {
     if (createdAt == null) {
       return 'Unknown date';
     }
-    return DateFormat('MMM d, yyyy • h:mm a').format(createdAt!);
+    return DateFormat('MMM d, yyyy | h:mm a').format(createdAt!);
   }
 }

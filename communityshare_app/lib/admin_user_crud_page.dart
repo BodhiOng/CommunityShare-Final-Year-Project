@@ -15,6 +15,7 @@ class AdminUserCrudPage extends StatefulWidget {
 }
 
 class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
+  static const int _usersPerPage = 8;
   static const List<String> _roles = [
     'donor',
     'recipient',
@@ -26,6 +27,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     'active',
     'inactive',
     'suspended',
+    'deleted',
   ];
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -38,6 +40,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
   String _errorMessage = '';
   String _roleFilter = 'all';
   String _statusFilter = 'all';
+  int _currentPage = 0;
 
   @override
   void initState() {
@@ -81,6 +84,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
       setState(() {
         _users = users;
         _isLoading = false;
+        _currentPage = 0;
       });
       _applyFilters();
     } catch (error) {
@@ -113,6 +117,34 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
 
         return matchesQuery && matchesRole && matchesStatus;
       }).toList(growable: false);
+      _currentPage = 0;
+    });
+  }
+
+  int get _totalPages {
+    if (_filteredUsers.isEmpty) {
+      return 0;
+    }
+    return (_filteredUsers.length / _usersPerPage).ceil();
+  }
+
+  List<_ManagedUserRecord> get _pagedUsers {
+    if (_filteredUsers.isEmpty) {
+      return const [];
+    }
+
+    final start = _currentPage * _usersPerPage;
+    final end = (start + _usersPerPage).clamp(0, _filteredUsers.length).toInt();
+    return _filteredUsers.sublist(start, end);
+  }
+
+  void _goToPage(int page) {
+    if (page < 0 || page >= _totalPages) {
+      return;
+    }
+
+    setState(() {
+      _currentPage = page;
     });
   }
 
@@ -205,8 +237,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     final fullNameController =
         TextEditingController(text: user?.fullName ?? '');
     final emailController = TextEditingController(text: user?.email ?? '');
-    final passwordHashController =
-        TextEditingController(text: user?.passwordHash ?? '');
     final phoneNumberController =
         TextEditingController(text: user?.phoneNumber ?? '');
     final recipientTypeController =
@@ -250,7 +280,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                   userId: userIdController.text.trim(),
                   fullName: fullNameController.text.trim(),
                   email: emailController.text.trim(),
-                  passwordHash: passwordHashController.text.trim(),
+                  passwordHash: '',
                   phoneNumber: phoneNumberController.text.trim(),
                   role: role,
                   status: status,
@@ -303,18 +333,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                         ),
                         const SizedBox(height: AppSpacing.md),
                         AppTextField(
-                          controller: userIdController,
-                          label: 'User ID',
-                          prefixIcon: const Icon(Icons.badge_outlined),
-                          validator: (value) {
-                            if ((value ?? '').trim().isEmpty) {
-                              return 'Enter a user ID.';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        AppTextField(
                           controller: fullNameController,
                           label: 'Full Name',
                           prefixIcon: const Icon(Icons.person_outline_rounded),
@@ -327,38 +345,46 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                         ),
                         const SizedBox(height: AppSpacing.md),
                         AppTextField(
-                          controller: emailController,
-                          label: 'Email',
-                          keyboardType: TextInputType.emailAddress,
-                          prefixIcon:
-                              const Icon(Icons.alternate_email_rounded),
-                          validator: (value) {
-                            final normalized = (value ?? '').trim();
-                            if (normalized.isEmpty) {
-                              return 'Enter an email address.';
-                            }
-                            final valid = RegExp(
-                              r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$',
-                            ).hasMatch(normalized);
-                            if (!valid) {
-                              return 'Enter a valid email address.';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        AppTextField(
-                          controller: passwordHashController,
-                          label: 'Password Hash',
-                          prefixIcon: const Icon(Icons.password_outlined),
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        AppTextField(
                           controller: phoneNumberController,
                           label: 'Phone Number',
                           keyboardType: TextInputType.phone,
                           prefixIcon: const Icon(Icons.phone_outlined),
                         ),
+                        if (user == null) ...[
+                          const SizedBox(height: AppSpacing.md),
+                          AppTextField(
+                            controller: userIdController,
+                            label: 'User ID',
+                            prefixIcon: const Icon(Icons.badge_outlined),
+                            validator: (value) {
+                              if ((value ?? '').trim().isEmpty) {
+                                return 'Enter a user ID.';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          AppTextField(
+                            controller: emailController,
+                            label: 'Email',
+                            keyboardType: TextInputType.emailAddress,
+                            prefixIcon:
+                                const Icon(Icons.alternate_email_rounded),
+                            validator: (value) {
+                              final normalized = (value ?? '').trim();
+                              if (normalized.isEmpty) {
+                                return 'Enter an email address.';
+                              }
+                              final valid = RegExp(
+                                r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$',
+                              ).hasMatch(normalized);
+                              if (!valid) {
+                                return 'Enter a valid email address.';
+                              }
+                              return null;
+                            },
+                          ),
+                        ],
                         const SizedBox(height: AppSpacing.md),
                         DropdownButtonFormField<String>(
                           value: role,
@@ -549,7 +575,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     userIdController.dispose();
     fullNameController.dispose();
     emailController.dispose();
-    passwordHashController.dispose();
     phoneNumberController.dispose();
     recipientTypeController.dispose();
     hubIdController.dispose();
@@ -947,8 +972,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                       ? 'Not available'
                       : DateFormat('MMM d, yyyy').format(user.createdAt!),
                 ),
-                if (user.passwordHash.isNotEmpty)
-                  _detailLine('Password Hash', user.passwordHash),
                 if (user.role == 'recipient')
                   _detailLine('Recipient Type', details.recipientType),
                 if (user.role == 'hub') ...[
@@ -1120,131 +1143,169 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                 message:
                     'Adjust your search or filters, or create a new USER record.',
               )
-            else
-              ..._filteredUsers.map(
+            else ...[
+              ..._pagedUsers.map(
                 (user) => Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                  child: Card(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(AppRadius.md),
-                      onTap: () => _showUserDetails(user),
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  width: 56,
-                                  height: 56,
-                                  decoration: BoxDecoration(
-                                    color:
-                                        AppColors.night.withValues(alpha: 0.35),
-                                    borderRadius:
-                                        BorderRadius.circular(AppRadius.sm),
-                                  ),
-                                  child: const Icon(
-                                    Icons.person_outline_rounded,
-                                    color: AppColors.mint,
-                                  ),
-                                ),
-                                const SizedBox(width: AppSpacing.md),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        user.fullName.isNotEmpty
-                                            ? user.fullName
-                                            : user.userId,
-                                        style: const TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        user.email.isNotEmpty
-                                            ? user.email
-                                            : 'No email provided',
-                                        style: const TextStyle(
-                                          color: AppColors.mist,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        'User ID: ${user.userId}',
-                                        style: const TextStyle(
-                                          color: AppColors.sand,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                PopupMenuButton<String>(
-                                  color: AppColors.forest,
-                                  onSelected: (value) async {
-                                    switch (value) {
-                                      case 'view':
-                                        await _showUserDetails(user);
-                                        break;
-                                      case 'edit':
-                                        await _openUserEditor(user: user);
-                                        break;
-                                      case 'delete':
-                                        await _confirmDelete(user);
-                                        break;
-                                    }
-                                  },
-                                  itemBuilder: (context) => const [
-                                    PopupMenuItem<String>(
-                                      value: 'view',
-                                      child: Text('View details'),
+                  child: Opacity(
+                    opacity: user.status.toLowerCase() == 'deleted' ? 0.45 : 1,
+                    child: Card(
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        onTap: user.status.toLowerCase() == 'deleted'
+                            ? null
+                            : () => _showUserDetails(user),
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 56,
+                                    height: 56,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.night
+                                          .withValues(alpha: 0.35),
+                                      borderRadius:
+                                          BorderRadius.circular(AppRadius.sm),
                                     ),
-                                    PopupMenuItem<String>(
-                                      value: 'edit',
-                                      child: Text('Edit user'),
+                                    child: const Icon(
+                                      Icons.person_outline_rounded,
+                                      color: AppColors.mint,
                                     ),
-                                    PopupMenuItem<String>(
-                                      value: 'delete',
-                                      child: Text('Delete user'),
+                                  ),
+                                  const SizedBox(width: AppSpacing.md),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          user.fullName.isNotEmpty
+                                              ? user.fullName
+                                              : user.userId,
+                                          style: const TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          user.email.isNotEmpty
+                                              ? user.email
+                                              : 'No email provided',
+                                          style: const TextStyle(
+                                            color: AppColors.mist,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          'User ID: ${user.userId}',
+                                          style: const TextStyle(
+                                            color: AppColors.sand,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            Wrap(
-                              spacing: AppSpacing.sm,
-                              runSpacing: AppSpacing.sm,
-                              children: [
-                                _InfoPill(
-                                  icon: Icons.admin_panel_settings_outlined,
-                                  label: _titleCase(user.role),
-                                ),
-                                _InfoPill(
-                                  icon: Icons.toggle_on_outlined,
-                                  label: _titleCase(user.status),
-                                ),
-                                if (user.phoneNumber.isNotEmpty)
+                                  ),
+                                  if (user.status.toLowerCase() != 'deleted')
+                                    PopupMenuButton<String>(
+                                      color: AppColors.forest,
+                                      onSelected: (value) async {
+                                        switch (value) {
+                                          case 'view':
+                                            await _showUserDetails(user);
+                                            break;
+                                          case 'edit':
+                                            await _openUserEditor(user: user);
+                                            break;
+                                          case 'delete':
+                                            await _confirmDelete(user);
+                                            break;
+                                        }
+                                      },
+                                      itemBuilder: (context) => const [
+                                        PopupMenuItem<String>(
+                                          value: 'view',
+                                          child: Text('View details'),
+                                        ),
+                                        PopupMenuItem<String>(
+                                          value: 'edit',
+                                          child: Text('Edit user'),
+                                        ),
+                                        PopupMenuItem<String>(
+                                          value: 'delete',
+                                          child: Text('Delete user'),
+                                        ),
+                                      ],
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: AppSpacing.md),
+                              Wrap(
+                                spacing: AppSpacing.sm,
+                                runSpacing: AppSpacing.sm,
+                                children: [
                                   _InfoPill(
-                                    icon: Icons.phone_outlined,
-                                    label: user.phoneNumber,
+                                    icon: Icons.admin_panel_settings_outlined,
+                                    label: _titleCase(user.role),
                                   ),
-                              ],
-                            ),
-                          ],
+                                  _InfoPill(
+                                    icon: Icons.toggle_on_outlined,
+                                    label: _titleCase(user.status),
+                                  ),
+                                  if (user.phoneNumber.isNotEmpty)
+                                    _InfoPill(
+                                      icon: Icons.phone_outlined,
+                                      label: user.phoneNumber,
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
+              if (_totalPages > 1)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Page ${_currentPage + 1} of $_totalPages',
+                        style: const TextStyle(color: AppColors.sand),
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed:
+                                _currentPage > 0
+                                    ? () => _goToPage(_currentPage - 1)
+                                    : null,
+                            icon: const Icon(Icons.chevron_left),
+                          ),
+                          IconButton(
+                            onPressed:
+                                _currentPage + 1 < _totalPages
+                                    ? () => _goToPage(_currentPage + 1)
+                                    : null,
+                            icon: const Icon(Icons.chevron_right),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ],
         ),
       ),

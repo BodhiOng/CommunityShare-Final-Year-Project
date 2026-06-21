@@ -18,6 +18,7 @@ class AdminUserManagementPage extends StatefulWidget {
 }
 
 class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
+  static const int _usersPerPage = 8;
   int _selectedIndex = 0; // 0 for User Management, 1 for Product Moderation, 2 for Order Moderation, 3 for Customer Support, 4 for Profile
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -26,6 +27,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
   bool _isLoading = true;
   String _searchQuery = '';
   String _selectedRole = 'All';
+  int _currentPage = 0;
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -77,6 +79,7 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
         _users = users;
         _filteredUsers = users;
         _isLoading = false;
+        _currentPage = 0;
       });
     } catch (e) {
       debugPrint('Error fetching users: $e');
@@ -109,6 +112,36 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
 
             return matchesSearch && matchesRole;
           }).toList();
+      _currentPage = 0;
+    });
+  }
+
+  int get _totalPages {
+    if (_filteredUsers.isEmpty) {
+      return 0;
+    }
+    return (_filteredUsers.length / _usersPerPage).ceil();
+  }
+
+  List<Map<String, dynamic>> get _pagedUsers {
+    if (_filteredUsers.isEmpty) {
+      return const [];
+    }
+
+    final start = _currentPage * _usersPerPage;
+    final end = (start + _usersPerPage)
+        .clamp(0, _filteredUsers.length)
+        .toInt();
+    return _filteredUsers.sublist(start, end);
+  }
+
+  void _goToPage(int page) {
+    if (page < 0 || page >= _totalPages) {
+      return;
+    }
+
+    setState(() {
+      _currentPage = page;
     });
   }
 
@@ -899,98 +932,146 @@ class _AdminUserManagementPageState extends State<AdminUserManagementPage> {
                         ],
                       ),
                     )
-                    : ListView.builder(
-                      itemCount: _filteredUsers.length,
-                      itemBuilder: (context, index) {
-                        final user = _filteredUsers[index];
-                        return Card(
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 4,
-                          ),
-                          color: AppColors.deepSlateGray,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            leading: CircleAvatar(
-                              radius: 24,
-                              backgroundColor: AppColors.mutedTeal.withValues(
-                                alpha: 0.2,
-                              ),
-                              child:
-                                  user['profileImageUrl'] != null &&
-                                          (user['profileImageUrl'] as String)
-                                              .isNotEmpty
-                                      ? ClipOval(
-                                        child: ImageUtils.base64ToImage(
-                                          user['profileImageUrl'] as String,
-                                          width: 48,
-                                          height: 48,
-                                          fit: BoxFit.cover,
-                                          errorWidget: const Icon(
-                                            Icons.person,
-                                            color: AppColors.mutedTeal,
-                                            size: 32,
-                                          ),
+                    : Column(
+                      children: [
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: _pagedUsers.length,
+                            itemBuilder: (context, index) {
+                              final user = _pagedUsers[index];
+                              return Card(
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 4,
+                                ),
+                                color: AppColors.deepSlateGray,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  leading: CircleAvatar(
+                                    radius: 24,
+                                    backgroundColor: AppColors.mutedTeal
+                                        .withValues(alpha: 0.2),
+                                    child:
+                                        user['profileImageUrl'] != null &&
+                                                (user['profileImageUrl']
+                                                        as String)
+                                                    .isNotEmpty
+                                            ? ClipOval(
+                                              child: ImageUtils.base64ToImage(
+                                                user['profileImageUrl']
+                                                    as String,
+                                                width: 48,
+                                                height: 48,
+                                                fit: BoxFit.cover,
+                                                errorWidget: const Icon(
+                                                  Icons.person,
+                                                  color: AppColors.mutedTeal,
+                                                  size: 32,
+                                                ),
+                                              ),
+                                            )
+                                            : const Icon(
+                                              Icons.person,
+                                              color: AppColors.mutedTeal,
+                                              size: 32,
+                                            ),
+                                  ),
+                                  title: Text(
+                                    user['username'] as String,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        user['email'] as String,
+                                        style: TextStyle(
+                                          color: AppColors.coolGray,
+                                          fontSize: 12,
                                         ),
-                                      )
-                                      : const Icon(
-                                        Icons.person,
-                                        color: AppColors.mutedTeal,
-                                        size: 32,
                                       ),
-                            ),
-                            title: Text(
-                              user['username'] as String,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          _buildRoleBadge(user['role'] as String),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'RM ${(user['walletBalance'] as double).toStringAsFixed(2)}',
+                                            style: TextStyle(
+                                              color: AppColors.mutedTeal,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(
+                                      Icons.more_vert,
+                                      color: Colors.white,
+                                    ),
+                                    onPressed:
+                                        () => _showUserActionsMenu(
+                                          context,
+                                          user,
+                                        ),
+                                  ),
+                                  onTap: () => _showUserDetailsDialog(user),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        if (_totalPages > 1)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  user['email'] as String,
-                                  style: TextStyle(
-                                    color: AppColors.coolGray,
-                                    fontSize: 12,
-                                  ),
+                                  'Page ${_currentPage + 1} of $_totalPages',
+                                  style: TextStyle(color: AppColors.coolGray),
                                 ),
-                                const SizedBox(height: 4),
                                 Row(
                                   children: [
-                                    _buildRoleBadge(user['role'] as String),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'RM ${(user['walletBalance'] as double).toStringAsFixed(2)}',
-                                      style: TextStyle(
-                                        color: AppColors.mutedTeal,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    IconButton(
+                                      onPressed:
+                                          _currentPage > 0
+                                              ? () => _goToPage(
+                                                _currentPage - 1,
+                                              )
+                                              : null,
+                                      icon: const Icon(Icons.chevron_left),
+                                      color: AppColors.softLemonYellow,
+                                    ),
+                                    IconButton(
+                                      onPressed:
+                                          _currentPage + 1 < _totalPages
+                                              ? () => _goToPage(
+                                                _currentPage + 1,
+                                              )
+                                              : null,
+                                      icon: const Icon(Icons.chevron_right),
+                                      color: AppColors.softLemonYellow,
                                     ),
                                   ],
                                 ),
                               ],
                             ),
-                            trailing: IconButton(
-                              icon: const Icon(
-                                Icons.more_vert,
-                                color: Colors.white,
-                              ),
-                              onPressed:
-                                  () => _showUserActionsMenu(context, user),
-                            ),
-                            onTap: () => _showUserDetailsDialog(user),
                           ),
-                        );
-                      },
+                      ],
                     ),
           ),
         ],

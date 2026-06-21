@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'constants.dart';
 import 'admin_profile_page.dart';
-import 'admin_user_management_page.dart';
+import 'admin_user_crud_page.dart';
 import 'admin_product_moderation_page.dart';
 import 'admin_customer_support_page.dart';
 import 'utils/page_transitions.dart';
@@ -185,7 +185,7 @@ class _AdminOrderModerationPageState extends State<AdminOrderModerationPage> {
         // Navigate to User Management page
         Navigator.pushReplacement(
           context,
-          DarkPageReplaceRoute(page: const AdminUserManagementPage()),
+          DarkPageReplaceRoute(page: const AdminUserCrudPage()),
         );
         break;
       case 1:

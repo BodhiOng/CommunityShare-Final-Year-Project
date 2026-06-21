@@ -465,8 +465,7 @@ class _StatusChip extends StatelessWidget {
   const _StatusChip({
     required this.icon,
     required this.label,
-    this.light = false,
-  });
+  }) : light = false;
 
   final IconData icon;
   final String label;

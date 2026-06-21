@@ -163,7 +163,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
 
       QueryDocumentSnapshot<Map<String, dynamic>>? selected;
       for (final doc in docs) {
-        final status = doc.data()['requestStatus']?.toString().trim() ?? '';
+        final status = doc.data()['requestStatus'].toString().trim() ?? '';
         if (_isActiveRequestStatus(status)) {
           selected = doc;
           break;
