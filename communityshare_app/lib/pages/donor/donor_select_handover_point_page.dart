@@ -1,0 +1,697 @@
+import 'dart:math';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+import '../../constants.dart';
+import 'donor_incoming_requests_page.dart';
+import '../../widgets/state_widgets.dart';
+
+class DonorSelectHandoverPointPage extends StatefulWidget {
+  const DonorSelectHandoverPointPage({
+    super.key,
+    required this.request,
+  });
+
+  final DonorIncomingRequestRecord request;
+
+  @override
+  State<DonorSelectHandoverPointPage> createState() =>
+      _DonorSelectHandoverPointPageState();
+}
+
+class _DonorSelectHandoverPointPageState
+    extends State<DonorSelectHandoverPointPage> {
+  final Random _random = Random();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  bool _isLoading = true;
+  bool _isSaving = false;
+  bool _isEditing = false;
+  String _errorMessage = '';
+  String? _selectedHubId;
+  String _handoverType = 'community_hub_pickup';
+  String _requestStatus = '';
+  String? _handoverDocId;
+  List<_CommunityHubRecord> _hubs = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPage();
+  }
+
+  Future<void> _loadPage() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      final requestSnapshot = await _firestore
+          .collection('ITEM_REQUEST')
+          .doc(widget.request.docId)
+          .get();
+      final handoverSnapshot = await _firestore
+          .collection('HANDOVER')
+          .where('requestId', isEqualTo: widget.request.requestId)
+          .limit(1)
+          .get();
+      final hubSnapshot = await _firestore.collection('COMMUNITY_HUB').get();
+
+      final requestData = requestSnapshot.data() ?? const <String, dynamic>{};
+      final handoverDoc =
+          handoverSnapshot.docs.isNotEmpty ? handoverSnapshot.docs.first : null;
+      final handoverData = handoverDoc?.data() ?? const <String, dynamic>{};
+      final hubs = hubSnapshot.docs
+          .map((doc) => _CommunityHubRecord.fromFirestore(doc.id, doc.data()))
+          .toList(growable: false)
+        ..sort((a, b) => a.hubName.toLowerCase().compareTo(b.hubName.toLowerCase()));
+
+      final existingHubId =
+          handoverData['hubId']?.toString().trim().isNotEmpty == true
+              ? handoverData['hubId'].toString().trim()
+              : requestData['hubId']?.toString().trim().isNotEmpty == true
+                  ? requestData['hubId'].toString().trim()
+                  : widget.request.hubId;
+      final inferredHandoverType =
+          handoverData['handoverType']?.toString().trim().isNotEmpty == true
+              ? handoverData['handoverType'].toString().trim()
+              : existingHubId.isEmpty &&
+                      handoverDoc != null &&
+                      (requestData['hubId']?.toString().trim().isNotEmpty != true)
+                  ? 'independent_delivery'
+              : 'community_hub_pickup';
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _requestStatus = requestData['requestStatus']?.toString().trim() ??
+            widget.request.requestStatus;
+        _handoverDocId = handoverDoc?.id;
+        _handoverType = inferredHandoverType;
+        _selectedHubId = existingHubId.isNotEmpty
+            ? existingHubId
+            : hubs.isNotEmpty && inferredHandoverType == 'community_hub_pickup'
+                ? hubs.first.hubId
+                : null;
+        _isEditing = handoverDoc != null;
+        _hubs = hubs;
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorMessage = 'Unable to load handover options: $error';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _saveHandover() async {
+    final donorId = _auth.currentUser?.uid;
+    if (donorId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You need to sign in before saving a handover.'),
+        ),
+      );
+      return;
+    }
+
+    if (_requestStatus.toLowerCase() == 'pending') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Approve the request before scheduling handover.'),
+        ),
+      );
+      return;
+    }
+
+    final isIndependent = _handoverType == 'independent_delivery';
+    if (!isIndependent && (_selectedHubId == null || _selectedHubId!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a community hub first.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      final deliveryStatus = isIndependent
+          ? 'delivering_to_recipient'
+          : 'delivering_to_hub';
+      final batch = _firestore.batch();
+      final requestRef =
+          _firestore.collection('ITEM_REQUEST').doc(widget.request.docId);
+      batch.update(requestRef, {
+        'hubId': isIndependent ? null : _selectedHubId,
+        'requestStatus': deliveryStatus,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!isIndependent && widget.request.itemDocId.isNotEmpty) {
+        final itemRef =
+            _firestore.collection('ITEM_LISTING').doc(widget.request.itemDocId);
+        batch.update(itemRef, {
+          'availabilityStatus': 'reserved',
+        });
+      }
+
+      final handoverId = _handoverDocId ?? _generateHandoverId();
+      final handoverRef = _firestore.collection('HANDOVER').doc(handoverId);
+      batch.set(
+        handoverRef,
+        {
+          'handoverId': handoverId,
+          'requestId': widget.request.requestId,
+          'hubId': isIndependent ? null : _selectedHubId,
+          'handoverType': _handoverType,
+          'handoverStatus': deliveryStatus,
+          'completedAt': null,
+        },
+        SetOptions(merge: true),
+      );
+
+      final historyId = _generateHistoryId();
+      final historyRef = _firestore.collection('DONATION_STATUS_HISTORY').doc(historyId);
+      batch.set(historyRef, {
+        'statusHistoryId': historyId,
+        'requestId': widget.request.requestId,
+        'status': deliveryStatus,
+        'changedAt': FieldValue.serverTimestamp(),
+        'changedByUserId': donorId,
+      });
+
+      await batch.commit();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Handover point saved.')),
+      );
+      setState(() {
+        _handoverDocId = handoverId;
+        _isEditing = true;
+        _isSaving = false;
+      });
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to save handover point: $error')),
+      );
+      setState(() {
+        _isSaving = false;
+      });
+    }
+  }
+
+  Future<void> _cancelHandover() async {
+    final donorId = _auth.currentUser?.uid;
+    if (donorId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You need to sign in before canceling a handover.'),
+        ),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel handover?'),
+        content: const Text(
+          'This will reject the request and delete the handover tracking records.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Cancel handover'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) {
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      final batch = _firestore.batch();
+      final requestRef =
+          _firestore.collection('ITEM_REQUEST').doc(widget.request.docId);
+      batch.update(requestRef, {
+        'requestStatus': 'rejected',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      final itemRef = await _resolveItemRef();
+      if (itemRef != null) {
+        batch.update(itemRef, {
+          'availabilityStatus': 'available',
+        });
+      }
+
+      final handoverSnapshot = await _firestore
+          .collection('HANDOVER')
+          .where('requestId', isEqualTo: widget.request.requestId)
+          .get();
+      for (final doc in handoverSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
+      final historySnapshot = await _firestore
+          .collection('DONATION_STATUS_HISTORY')
+          .where('requestId', isEqualTo: widget.request.requestId)
+          .get();
+      for (final doc in historySnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
+      await batch.commit();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Handover canceled.')),
+      );
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to cancel handover: $error')),
+      );
+      setState(() {
+        _isSaving = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Select Handover Point')),
+        body: const AppLoadingState(message: 'Loading handover points...'),
+      );
+    }
+
+    if (_errorMessage.isNotEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Select Handover Point')),
+        body: AppErrorState(
+          message: _errorMessage,
+          onRetry: _loadPage,
+        ),
+      );
+    }
+
+    final isCommunityHub = _handoverType == 'community_hub_pickup';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Select Handover Point'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        children: [
+          _PlannerHero(
+            request: widget.request,
+            requestStatus: _requestStatus,
+            handoverType: _handoverType,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _SectionCard(
+            title: 'Handover Setup',
+              subtitle:
+                'Choose the handover method and assign a community hub when needed.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ToggleButtons(
+                  isSelected: [
+                    _handoverType == 'community_hub_pickup',
+                    _handoverType == 'independent_delivery',
+                  ],
+                  onPressed: _isSaving
+                      ? null
+                      : (index) {
+                          setState(() {
+                            _handoverType = index == 0
+                                ? 'community_hub_pickup'
+                                : 'independent_delivery';
+                            if (_handoverType == 'community_hub_pickup') {
+                              _selectedHubId = _selectedHubId ??
+                                  (_hubs.isNotEmpty ? _hubs.first.hubId : null);
+                            } else {
+                              _selectedHubId = null;
+                            }
+                          });
+                        },
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  constraints:
+                      const BoxConstraints(minHeight: 44, minWidth: 140),
+                  children: const [
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                      child: Text('Community Hub'),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                      child: Text('Independent'),
+                    ),
+                  ],
+                ),
+                if (isCommunityHub) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  DropdownButtonFormField<String>(
+                    value: _selectedHubId,
+                    decoration: const InputDecoration(
+                      labelText: 'Community Hub',
+                    ),
+                    items: _hubs
+                        .map(
+                          (hub) => DropdownMenuItem<String>(
+                            value: hub.hubId,
+                            child: Text(hub.hubName),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: _isSaving
+                        ? null
+                        : (value) {
+                            setState(() {
+                              _selectedHubId = value;
+                            });
+                          },
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.sm,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
+          child: Row(
+            children: [
+              if (_isEditing) ...[
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _isSaving ? null : _cancelHandover,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.coral,
+                      side: const BorderSide(color: AppColors.coral),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                      ),
+                      minimumSize: const Size.fromHeight(52),
+                    ),
+                    child: const Text('Cancel Handover'),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+              ],
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _isSaving ? null : _saveHandover,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                    ),
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.night,
+                          ),
+                        )
+                      : Text(_isEditing
+                          ? 'Save Changes'
+                          : 'Save Handover Point'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _generateHandoverId() {
+    final digits = List.generate(13, (_) => _random.nextInt(10)).join();
+    return 'handover_$digits';
+  }
+
+  String _generateHistoryId() {
+    final digits = List.generate(13, (_) => _random.nextInt(10)).join();
+    return 'history_$digits';
+  }
+
+  Future<DocumentReference<Map<String, dynamic>>?> _resolveItemRef() async {
+    if (widget.request.itemDocId.isNotEmpty) {
+      return _firestore.collection('ITEM_LISTING').doc(widget.request.itemDocId);
+    }
+
+    if (widget.request.itemId.isEmpty) {
+      return null;
+    }
+
+    final snapshot = await _firestore
+        .collection('ITEM_LISTING')
+        .where('itemId', isEqualTo: widget.request.itemId)
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isEmpty) {
+      return null;
+    }
+
+    return snapshot.docs.first.reference;
+  }
+}
+
+class _CommunityHubRecord {
+  const _CommunityHubRecord({
+    required this.hubId,
+    required this.hubName,
+    required this.address,
+    required this.operatingHours,
+    required this.contactNumber,
+    required this.status,
+  });
+
+  final String hubId;
+  final String hubName;
+  final String address;
+  final String operatingHours;
+  final String contactNumber;
+  final String status;
+
+  factory _CommunityHubRecord.fromFirestore(
+    String docId,
+    Map<String, dynamic> data,
+  ) {
+    return _CommunityHubRecord(
+      hubId: data['hubId']?.toString().trim().isNotEmpty == true
+          ? data['hubId'].toString().trim()
+          : docId,
+      hubName: data['hubName']?.toString().trim().isNotEmpty == true
+          ? data['hubName'].toString().trim()
+          : 'Community Hub',
+      address: data['address']?.toString().trim() ?? 'Address not provided',
+      operatingHours:
+          data['operatingHours']?.toString().trim() ?? 'Hours not provided',
+      contactNumber:
+          data['contactNumber']?.toString().trim() ?? 'Contact not provided',
+      status: data['status']?.toString().trim() ?? 'inactive',
+    );
+  }
+}
+
+class _PlannerHero extends StatelessWidget {
+  const _PlannerHero({
+    required this.request,
+    required this.requestStatus,
+    required this.handoverType,
+  });
+
+  final DonorIncomingRequestRecord request;
+  final String requestStatus;
+  final String handoverType;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        gradient: const LinearGradient(
+          colors: [AppColors.forest, AppColors.pine],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'HANDOVER PLANNING',
+            style: TextStyle(
+              color: AppColors.sand,
+              letterSpacing: 1.3,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            request.itemTitle,
+            style: const TextStyle(
+              color: AppColors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Recipient: ${request.recipientName}',
+            style: const TextStyle(color: AppColors.sand),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.xs,
+            children: [
+              _StatusChip(
+                label: titleCaseLabel(requestStatus),
+                color: requestStatusColor(requestStatus),
+              ),
+              _StatusChip(
+                label: titleCaseLabel(handoverType),
+                color: AppColors.sun,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          const Text(
+            'Choose the handover option and continue without scheduling an entry timestamp.',
+            style: TextStyle(
+              color: AppColors.white,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              subtitle,
+              style: const TextStyle(color: AppColors.mist, height: 1.5),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({
+    required this.label,
+    required this.color,
+  });
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color == AppColors.pine ? AppColors.sand : color,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
