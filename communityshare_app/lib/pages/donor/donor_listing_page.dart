@@ -31,6 +31,8 @@ class _DonorListingPageState extends State<DonorListingPage> {
 
   List<DonorListingItem> _items = [];
   List<DonorListingItem> _filteredItems = [];
+  int _currentPage = 0;
+  static const int _itemsPerPage = 8;
   final Set<String> _selectedForDelete = <String>{};
   bool _deleteMode = false;
   bool _isLoading = true;
@@ -80,6 +82,7 @@ class _DonorListingPageState extends State<DonorListingPage> {
       setState(() {
         _items = items;
         _filteredItems = _applyFilters(items, _searchController.text);
+        _currentPage = 0;
         _isLoading = false;
       });
     } catch (error) {
@@ -97,6 +100,7 @@ class _DonorListingPageState extends State<DonorListingPage> {
   void _filterItems() {
     setState(() {
       _filteredItems = _applyFilters(_items, _searchController.text);
+      _currentPage = 0;
       _selectedForDelete.removeWhere(
         (docId) => !_filteredItems.any((item) => item.docId == docId),
       );
@@ -111,6 +115,7 @@ class _DonorListingPageState extends State<DonorListingPage> {
     setState(() {
       _selectedAvailabilityFilter = value;
       _filteredItems = _applyFilters(_items, _searchController.text);
+      _currentPage = 0;
       _selectedForDelete.removeWhere(
         (docId) => !_filteredItems.any((item) => item.docId == docId),
       );
@@ -135,6 +140,29 @@ class _DonorListingPageState extends State<DonorListingPage> {
           item.itemId.toLowerCase().contains(normalizedQuery);
       return matchesAvailability && matchesQuery;
     }).toList();
+  }
+
+  int get _totalPages {
+    if (_filteredItems.isEmpty) {
+      return 1;
+    }
+    return (_filteredItems.length / _itemsPerPage).ceil();
+  }
+
+  List<DonorListingItem> get _paginatedItems {
+    final start = _currentPage * _itemsPerPage;
+    if (start >= _filteredItems.length) {
+      return const [];
+    }
+    final end = (start + _itemsPerPage).clamp(0, _filteredItems.length);
+    return _filteredItems.sublist(start, end);
+  }
+
+  void _goToPage(int page) {
+    if (page < 0 || page >= _totalPages) {
+      return;
+    }
+    setState(() => _currentPage = page);
   }
 
   Future<void> _openDonationForm({DonorListingItem? item}) async {
@@ -401,7 +429,7 @@ class _DonorListingPageState extends State<DonorListingPage> {
                     onAddPressed: () => _openDonationForm(),
                   )
                 else
-                  ..._filteredItems.map(
+                  ..._paginatedItems.map(
                     (item) => Padding(
                       padding: const EdgeInsets.only(bottom: AppSpacing.md),
                       child: _DonationCard(
@@ -414,6 +442,18 @@ class _DonorListingPageState extends State<DonorListingPage> {
                       ),
                     ),
                   ),
+                if (_filteredItems.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  _PaginationBar(
+                    currentPage: _currentPage,
+                    totalPages: _totalPages,
+                    onPrevious:
+                        _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
+                    onNext: _currentPage + 1 < _totalPages
+                        ? () => _goToPage(_currentPage + 1)
+                        : null,
+                  ),
+                ],
                 ],
               ),
             ),
@@ -431,6 +471,46 @@ class _DonorListingPageState extends State<DonorListingPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PaginationBar extends StatelessWidget {
+  const _PaginationBar({
+    required this.currentPage,
+    required this.totalPages,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final int currentPage;
+  final int totalPages;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          'Page ${currentPage + 1} of $totalPages',
+          style: const TextStyle(
+            color: AppColors.sand,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left_rounded),
+          color: onPrevious == null ? AppColors.slate : AppColors.mint,
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right_rounded),
+          color: onNext == null ? AppColors.slate : AppColors.mint,
+        ),
+      ],
     );
   }
 }

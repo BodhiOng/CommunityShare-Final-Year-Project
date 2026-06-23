@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -451,14 +451,28 @@ class _RecipientRequestStatusLauncherPageState
 class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final TextEditingController _searchController = TextEditingController();
   bool _isLoading = true;
   String _errorMessage = '';
+  String _selectedRequestStatus = 'all';
+  String _selectedHandoverStage = 'all';
   List<DonorIncomingRequestRecord> _requests = const [];
+  List<DonorIncomingRequestRecord> _filteredRequests = const [];
+  int _currentPage = 0;
+  static const int _requestsPerPage = 8;
 
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(_filterRequests);
     _loadRequests();
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_filterRequests);
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadRequests() async {
@@ -486,6 +500,8 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
         if (!mounted) return;
         setState(() {
           _requests = const [];
+          _filteredRequests = const [];
+          _currentPage = 0;
           _isLoading = false;
         });
         return;
@@ -499,6 +515,14 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
             .get();
         requestDocs.addAll(snapshot.docs);
       }
+
+      final requestIds = requestDocs
+          .map((doc) => doc.data()['requestId']?.toString().trim().isNotEmpty == true
+              ? doc.data()['requestId'].toString().trim()
+              : doc.id)
+          .toSet()
+          .toList(growable: false);
+      final handoversByRequestId = await _loadHandoversByRequestIds(requestIds);
 
       final usersById = await _loadUsersByIds(
         requestDocs
@@ -524,15 +548,16 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
                     ? itemDoc.data()['itemId'].toString().trim()
                     : itemDoc.id):
                 {...itemDoc.data(), '_docId': itemDoc.id},
-        }[itemId] ??
-            const <String, dynamic>{};
+        }[itemId] ?? const <String, dynamic>{};
         final recipientId = data['recipientId']?.toString().trim() ?? '';
         final hubId = data['hubId']?.toString().trim() ?? '';
+        final requestId = data['requestId']?.toString().trim().isNotEmpty == true
+            ? data['requestId'].toString().trim()
+            : doc.id;
+        final handoverData = handoversByRequestId[requestId] ?? const <String, dynamic>{};
 
         return DonorIncomingRequestRecord(
-          requestId: data['requestId']?.toString().trim().isNotEmpty == true
-              ? data['requestId'].toString().trim()
-              : doc.id,
+          requestId: requestId,
           docId: doc.id,
           itemId: itemId,
           itemDocId: itemData['_docId']?.toString() ?? '',
@@ -552,6 +577,7 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
           hubName: _displayNameForHub(hubsById[hubId], hubId),
           requestNote: data['requestNote']?.toString().trim() ?? '',
           requestStatus: data['requestStatus']?.toString().trim() ?? 'pending',
+          handoverStatus: handoverData['handoverStatus']?.toString().trim() ?? '',
           requestedAt: _readDateTime(data['requestedAt']),
           updatedAt: _readDateTime(data['updatedAt']),
         );
@@ -565,12 +591,19 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
       if (!mounted) return;
       setState(() {
         _requests = records;
+        _filteredRequests = _applyFilters(
+          records,
+          _searchController.text,
+          _selectedRequestStatus,
+          _selectedHandoverStage,
+        );
+        _currentPage = 0;
         _isLoading = false;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = '$error';
+        _errorMessage = '';
         _isLoading = false;
       });
     }
@@ -580,37 +613,33 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.title)),
+        appBar: AppBar(
+          toolbarHeight: 0,
+          automaticallyImplyLeading: false,
+          title: const SizedBox.shrink(),
+        ),
         body: const AppLoadingState(message: 'Loading requests...'),
       );
     }
 
     if (_errorMessage.isNotEmpty) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.title)),
+        appBar: AppBar(
+          toolbarHeight: 0,
+          automaticallyImplyLeading: false,
+          title: const SizedBox.shrink(),
+        ),
         body: AppErrorState(message: _errorMessage, onRetry: _loadRequests),
       );
     }
 
-    final eligible = _requests.where((request) {
-      final status = request.requestStatus.toLowerCase();
-      return widget.title == 'Donation Tracking'
-          ? status == 'approved' ||
-              status == 'delivering' ||
-              status == 'delivering_to_hub' ||
-              status == 'delivering_to_recipient' ||
-              status == 'item_at_community_hub' ||
-              status == 'completed'
-          : status == 'approved' ||
-              status == 'delivering' ||
-              status == 'delivering_to_hub' ||
-              status == 'delivering_to_recipient' ||
-              status == 'item_at_community_hub';
-    }).toList(growable: false);
-
-    if (eligible.isEmpty) {
+    if (_requests.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.title)),
+        appBar: AppBar(
+          toolbarHeight: 0,
+          automaticallyImplyLeading: false,
+          title: const SizedBox.shrink(),
+        ),
         body: AppEmptyState(
           icon: Icons.inbox_outlined,
           title: widget.emptyTitle,
@@ -619,31 +648,77 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
       );
     }
 
+    if (_filteredRequests.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(
+          toolbarHeight: 0,
+          automaticallyImplyLeading: false,
+          title: const SizedBox.shrink(),
+        ),
+        body: RefreshIndicator(
+          color: AppColors.mint,
+          onRefresh: _loadRequests,
+          child: ListView(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            children: [
+              _buildFilters(),
+              const SizedBox(height: AppSpacing.lg),
+              const AppEmptyState(
+                icon: Icons.search_off_rounded,
+                title: 'No matching requests',
+                message: 'Try a different search term.',
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(
+        toolbarHeight: 0,
+        automaticallyImplyLeading: false,
+        title: const SizedBox.shrink(),
+      ),
       body: RefreshIndicator(
         color: AppColors.mint,
         onRefresh: _loadRequests,
-        child: ListView.separated(
+        child: ListView(
           padding: const EdgeInsets.all(AppSpacing.lg),
-          itemCount: eligible.length,
-          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
-          itemBuilder: (context, index) {
-            final request = eligible[index];
-            return Card(
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(AppSpacing.md),
-                title: Text(request.itemTitle),
-                subtitle: Text('${request.requestStatus} • ${request.recipientName}'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => widget.builder(request: request),
+          children: [
+            _buildFilters(),
+            const SizedBox(height: AppSpacing.lg),
+            ..._paginatedRequests.map(
+              (request) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                child: Card(
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.all(AppSpacing.md),
+                    title: Text(request.itemTitle),
+                    subtitle: Text(
+                      '${titleCaseLabel(request.requestStatus)} - ${request.recipientName}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => widget.builder(request: request),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            );
-          },
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _PaginationBar(
+              currentPage: _currentPage,
+              totalPages: _totalPages,
+              onPrevious:
+                  _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
+              onNext: _currentPage + 1 < _totalPages
+                  ? () => _goToPage(_currentPage + 1)
+                  : null,
+            ),
+          ],
         ),
       ),
     );
@@ -671,6 +746,245 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
       };
     }
     return result;
+  }
+
+  Future<Map<String, Map<String, dynamic>>> _loadHandoversByRequestIds(
+    List<String> requestIds,
+  ) async {
+    final result = <String, Map<String, dynamic>>{};
+    for (final chunk in _chunkStrings(requestIds, 10)) {
+      final snapshot = await _firestore
+          .collection('HANDOVER')
+          .where('requestId', whereIn: chunk)
+          .get();
+      for (final doc in snapshot.docs) {
+        final requestId = doc.data()['requestId']?.toString().trim() ?? '';
+        if (requestId.isNotEmpty) {
+          result[requestId] = {
+            ...doc.data(),
+            '_docId': doc.id,
+          };
+        }
+      }
+    }
+    return result;
+  }
+
+  void _filterRequests() {
+    setState(() {
+      _filteredRequests = _applyFilters(
+        _requests,
+        _searchController.text,
+        _selectedRequestStatus,
+        _selectedHandoverStage,
+      );
+      _currentPage = 0;
+    });
+  }
+
+  List<DonorIncomingRequestRecord> _applyFilters(
+    List<DonorIncomingRequestRecord> requests,
+    String query,
+    String selectedRequestStatus,
+    String selectedHandoverStage,
+  ) {
+    final normalizedQuery = query.trim().toLowerCase();
+    return requests.where((request) {
+      final status = request.requestStatus.toLowerCase();
+      final handoverStage = _effectiveHandoverStage(request);
+      final isTracking = widget.title == 'Donation Tracking';
+      final isEligible = isTracking
+          ? status == 'approved' ||
+              status == 'delivering' ||
+              status == 'delivering_to_hub' ||
+              status == 'delivering_to_recipient' ||
+              status == 'item_at_community_hub' ||
+              status == 'completed'
+          : status == 'approved' ||
+              status == 'delivering' ||
+              status == 'delivering_to_hub' ||
+              status == 'delivering_to_recipient' ||
+              status == 'item_at_community_hub';
+      if (!isEligible) {
+        return false;
+      }
+
+      if (selectedRequestStatus != 'all' && status != selectedRequestStatus) {
+        return false;
+      }
+
+      if (selectedHandoverStage != 'all' && handoverStage != selectedHandoverStage) {
+        return false;
+      }
+
+      if (normalizedQuery.isEmpty) {
+        return true;
+      }
+
+      return request.itemTitle.toLowerCase().contains(normalizedQuery) ||
+          request.recipientName.toLowerCase().contains(normalizedQuery) ||
+          request.requestNote.toLowerCase().contains(normalizedQuery) ||
+          request.requestStatus.toLowerCase().contains(normalizedQuery) ||
+          request.itemCategory.toLowerCase().contains(normalizedQuery) ||
+          request.hubName.toLowerCase().contains(normalizedQuery) ||
+          request.itemId.toLowerCase().contains(normalizedQuery) ||
+          request.recipientId.toLowerCase().contains(normalizedQuery) ||
+          request.hubId.toLowerCase().contains(normalizedQuery);
+    }).toList(growable: false);
+  }
+
+  String _effectiveHandoverStage(DonorIncomingRequestRecord request) {
+    final handoverStatus = request.handoverStatus.toLowerCase().trim();
+    if (handoverStatus.isNotEmpty) {
+      return handoverStatus;
+    }
+
+    final requestStatus = request.requestStatus.toLowerCase().trim();
+    switch (requestStatus) {
+      case 'approved':
+      case 'delivering':
+      case 'delivering_to_hub':
+      case 'item_at_community_hub':
+      case 'delivering_to_recipient':
+      case 'completed':
+        return requestStatus;
+      default:
+        return 'approved';
+    }
+  }
+
+  Widget _buildFilters() {
+    final showStatusFilters = widget.title == 'Donation Tracking';
+    return Column(
+      children: [
+        TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: _searchController.text.isEmpty
+                ? null
+                : IconButton(
+                    onPressed: () => _searchController.clear(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+            hintText: widget.title == 'Donation Tracking'
+                ? 'Search tracked requests'
+                : 'Search handover requests',
+          ),
+        ),
+        if (showStatusFilters) ...[
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedRequestStatus,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Status',
+                ),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All statuses')),
+                    DropdownMenuItem(value: 'approved', child: Text('Approved')),
+                    DropdownMenuItem(value: 'delivering', child: Text('Delivering')),
+                    DropdownMenuItem(
+                      value: 'delivering_to_hub',
+                      child: Text('Delivering to hub'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'item_at_community_hub',
+                      child: Text('Item at community hub'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'delivering_to_recipient',
+                      child: Text('Delivering to recipient'),
+                    ),
+                    DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() {
+                      _selectedRequestStatus = value;
+                      _currentPage = 0;
+                      _filteredRequests = _applyFilters(
+                        _requests,
+                        _searchController.text,
+                        _selectedRequestStatus,
+                        _selectedHandoverStage,
+                      );
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedHandoverStage,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Handover stage',
+                ),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All stages')),
+                    DropdownMenuItem(value: 'approved', child: Text('Approved')),
+                    DropdownMenuItem(value: 'delivering', child: Text('Delivering')),
+                    DropdownMenuItem(
+                      value: 'delivering_to_hub',
+                      child: Text('Delivering to hub'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'item_at_community_hub',
+                      child: Text('Item at community hub'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'delivering_to_recipient',
+                      child: Text('Delivering to recipient'),
+                    ),
+                    DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() {
+                      _selectedHandoverStage = value;
+                      _currentPage = 0;
+                      _filteredRequests = _applyFilters(
+                        _requests,
+                        _searchController.text,
+                        _selectedRequestStatus,
+                        _selectedHandoverStage,
+                      );
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  int get _totalPages {
+    if (_filteredRequests.isEmpty) {
+      return 1;
+    }
+    return (_filteredRequests.length / _requestsPerPage).ceil();
+  }
+
+  List<DonorIncomingRequestRecord> get _paginatedRequests {
+    final start = _currentPage * _requestsPerPage;
+    if (start >= _filteredRequests.length) {
+      return const [];
+    }
+    final end = (start + _requestsPerPage).clamp(0, _filteredRequests.length);
+    return _filteredRequests.sublist(start, end);
+  }
+
+  void _goToPage(int page) {
+    if (page < 0 || page >= _totalPages) {
+      return;
+    }
+    setState(() => _currentPage = page);
   }
 
   static DateTime? _readDateTime(dynamic value) {
@@ -720,3 +1034,44 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
     return fullName.isNotEmpty ? fullName : hubId;
   }
 }
+
+class _PaginationBar extends StatelessWidget {
+  const _PaginationBar({
+    required this.currentPage,
+    required this.totalPages,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final int currentPage;
+  final int totalPages;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          'Page ${currentPage + 1} of $totalPages',
+          style: const TextStyle(
+            color: AppColors.sand,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left_rounded),
+          color: onPrevious == null ? AppColors.slate : AppColors.mint,
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right_rounded),
+          color: onNext == null ? AppColors.slate : AppColors.mint,
+        ),
+      ],
+    );
+  }
+}
+

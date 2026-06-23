@@ -139,18 +139,25 @@ class _DonorDonationStatusTrackingPageState
     }
   }
 
+  AppBar _buildAppBar() {
+    return AppBar(
+      automaticallyImplyLeading: true,
+      title: const SizedBox.shrink(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Donation Status Tracking')),
+        appBar: _buildAppBar(),
         body: const AppLoadingState(message: 'Loading donation timeline...'),
       );
     }
 
     if (_errorMessage.isNotEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Donation Status Tracking')),
+        appBar: _buildAppBar(),
         body: AppErrorState(
           message: _errorMessage,
           onRetry: _loadTracking,
@@ -160,9 +167,7 @@ class _DonorDonationStatusTrackingPageState
 
     final snapshot = _snapshot!;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Donation Status Tracking'),
-      ),
+      appBar: _buildAppBar(),
       body: RefreshIndicator(
         color: AppColors.mint,
         onRefresh: _loadTracking,

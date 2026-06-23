@@ -65,9 +65,12 @@ class _DonorSelectHandoverPointPageState
       final handoverDoc =
           handoverSnapshot.docs.isNotEmpty ? handoverSnapshot.docs.first : null;
       final handoverData = handoverDoc?.data() ?? const <String, dynamic>{};
-      final hubs = hubSnapshot.docs
-          .map((doc) => _CommunityHubRecord.fromFirestore(doc.id, doc.data()))
-          .toList(growable: false)
+      final hubsById = <String, _CommunityHubRecord>{};
+      for (final doc in hubSnapshot.docs) {
+        final hub = _CommunityHubRecord.fromFirestore(doc.id, doc.data());
+        hubsById.putIfAbsent(hub.hubId, () => hub);
+      }
+      final hubs = hubsById.values.toList(growable: false)
         ..sort((a, b) => a.hubName.toLowerCase().compareTo(b.hubName.toLowerCase()));
 
       final existingHubId =
@@ -95,7 +98,7 @@ class _DonorSelectHandoverPointPageState
         _handoverDocId = handoverDoc?.id;
         _handoverType = inferredHandoverType;
         _selectedHubId = existingHubId.isNotEmpty
-            ? existingHubId
+            ? (hubsById.containsKey(existingHubId) ? existingHubId : null)
             : hubs.isNotEmpty && inferredHandoverType == 'community_hub_pickup'
                 ? hubs.first.hubId
                 : null;
@@ -318,14 +321,22 @@ class _DonorSelectHandoverPointPageState
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Select Handover Point')),
+        appBar: AppBar(
+          toolbarHeight: 0,
+          automaticallyImplyLeading: false,
+          title: const SizedBox.shrink(),
+        ),
         body: const AppLoadingState(message: 'Loading handover points...'),
       );
     }
 
     if (_errorMessage.isNotEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Select Handover Point')),
+        appBar: AppBar(
+          toolbarHeight: 0,
+          automaticallyImplyLeading: false,
+          title: const SizedBox.shrink(),
+        ),
         body: AppErrorState(
           message: _errorMessage,
           onRetry: _loadPage,
@@ -337,7 +348,9 @@ class _DonorSelectHandoverPointPageState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Select Handover Point'),
+        toolbarHeight: 0,
+        automaticallyImplyLeading: false,
+        title: const SizedBox.shrink(),
       ),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
@@ -392,7 +405,7 @@ class _DonorSelectHandoverPointPageState
                 if (isCommunityHub) ...[
                   const SizedBox(height: AppSpacing.md),
                   DropdownButtonFormField<String>(
-                    value: _selectedHubId,
+                    initialValue: _selectedHubId,
                     decoration: const InputDecoration(
                       labelText: 'Community Hub',
                     ),

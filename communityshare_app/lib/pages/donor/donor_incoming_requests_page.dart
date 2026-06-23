@@ -19,15 +19,27 @@ class DonorIncomingRequestsPage extends StatefulWidget {
 class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final TextEditingController _searchController = TextEditingController();
 
+  static const int _requestsPerPage = 8;
   bool _isLoading = true;
   String _errorMessage = '';
   List<DonorIncomingRequestRecord> _requests = const [];
+  List<DonorIncomingRequestRecord> _filteredRequests = const [];
+  int _currentPage = 0;
 
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(_filterRequests);
     _loadRequests();
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_filterRequests);
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadRequests() async {
@@ -122,6 +134,7 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
           hubName: _displayNameForHub(hubsById[hubId], hubId),
           requestNote: data['requestNote']?.toString().trim() ?? '',
           requestStatus: data['requestStatus']?.toString().trim() ?? 'pending',
+          handoverStatus: '',
           requestedAt: _readDateTime(data['requestedAt']),
           updatedAt: _readDateTime(data['updatedAt']),
         );
@@ -138,6 +151,8 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
 
       setState(() {
         _requests = requests;
+        _filteredRequests = _applyFilters(requests, _searchController.text);
+        _currentPage = 0;
         _isLoading = false;
       });
     } catch (error) {
@@ -166,6 +181,58 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
     return result;
   }
 
+  void _filterRequests() {
+    setState(() {
+      _filteredRequests = _applyFilters(_requests, _searchController.text);
+      _currentPage = 0;
+    });
+  }
+
+  List<DonorIncomingRequestRecord> _applyFilters(
+    List<DonorIncomingRequestRecord> requests,
+    String query,
+  ) {
+    final normalizedQuery = query.trim().toLowerCase();
+    if (normalizedQuery.isEmpty) {
+      return requests;
+    }
+
+    return requests.where((request) {
+      return request.itemTitle.toLowerCase().contains(normalizedQuery) ||
+          request.recipientName.toLowerCase().contains(normalizedQuery) ||
+          request.requestNote.toLowerCase().contains(normalizedQuery) ||
+          request.requestStatus.toLowerCase().contains(normalizedQuery) ||
+          request.itemCategory.toLowerCase().contains(normalizedQuery) ||
+          request.hubName.toLowerCase().contains(normalizedQuery) ||
+          request.itemId.toLowerCase().contains(normalizedQuery) ||
+          request.recipientId.toLowerCase().contains(normalizedQuery) ||
+          request.hubId.toLowerCase().contains(normalizedQuery);
+    }).toList(growable: false);
+  }
+
+  int get _totalPages {
+    if (_filteredRequests.isEmpty) {
+      return 1;
+    }
+    return (_filteredRequests.length / _requestsPerPage).ceil();
+  }
+
+  List<DonorIncomingRequestRecord> get _paginatedRequests {
+    final start = _currentPage * _requestsPerPage;
+    if (start >= _filteredRequests.length) {
+      return const [];
+    }
+    final end = (start + _requestsPerPage).clamp(0, _filteredRequests.length);
+    return _filteredRequests.sublist(start, end);
+  }
+
+  void _goToPage(int page) {
+    if (page < 0 || page >= _totalPages) {
+      return;
+    }
+    setState(() => _currentPage = page);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -188,104 +255,163 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
       );
     }
 
+    if (_filteredRequests.isEmpty) {
+      return RefreshIndicator(
+        color: AppColors.mint,
+        onRefresh: _loadRequests,
+        child: ListView(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () => _searchController.clear(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                hintText: 'Search incoming requests',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            const AppEmptyState(
+              icon: Icons.search_off_rounded,
+              title: 'No matching requests',
+              message: 'Try a different search term.',
+            ),
+          ],
+        ),
+      );
+    }
+
     return RefreshIndicator(
       color: AppColors.mint,
       onRefresh: _loadRequests,
-      child: ListView.separated(
+      child: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
-        itemCount: _requests.length,
-        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
-        itemBuilder: (context, index) {
-          final request = _requests[index];
-          return InkWell(
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            onTap: () async {
-              final updated = await Navigator.of(context).push<bool>(
-                MaterialPageRoute(
-                  builder: (_) => DonorRequestDetailsPage(request: request),
-                ),
-              );
-              if (updated == true && mounted) {
-                await _loadRequests();
-              }
-            },
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(AppRadius.sm),
-                      child: SizedBox(
-                        width: 68,
-                        height: 68,
-                        child: request.itemPhotoUrl.isNotEmpty
-                            ? ImageUtils.base64ToImage(
-                                request.itemPhotoUrl,
-                                fit: BoxFit.cover,
-                                errorWidget: itemImageFallback(),
-                              )
-                            : itemImageFallback(),
-                      ),
+        children: [
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: () => _searchController.clear(),
+                      icon: const Icon(Icons.close_rounded),
                     ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            request.itemTitle,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
+              hintText: 'Search incoming requests',
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          ..._paginatedRequests.map(
+            (request) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                onTap: () async {
+                  final updated = await Navigator.of(context).push<bool>(
+                    MaterialPageRoute(
+                      builder: (_) => DonorRequestDetailsPage(request: request),
+                    ),
+                  );
+                  if (updated == true && mounted) {
+                    await _loadRequests();
+                  }
+                },
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                          child: SizedBox(
+                            width: 68,
+                            height: 68,
+                            child: request.itemPhotoUrl.isNotEmpty
+                                ? ImageUtils.base64ToImage(
+                                    request.itemPhotoUrl,
+                                    fit: BoxFit.cover,
+                                    errorWidget: itemImageFallback(),
+                                  )
+                                : itemImageFallback(),
                           ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            request.recipientName,
-                            style: const TextStyle(color: AppColors.mist),
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            formatRequestDateTime(request.requestedAt),
-                            style: const TextStyle(
-                              color: AppColors.slate,
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          Wrap(
-                            spacing: AppSpacing.sm,
-                            runSpacing: AppSpacing.xs,
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _RequestChip(
-                                label: titleCaseLabel(request.requestStatus),
-                                color: requestStatusColor(request.requestStatus),
+                              Text(
+                                request.itemTitle,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
                               ),
-                              if (request.hubId.isNotEmpty)
-                                _RequestChip(
-                                  label: 'Hub linked',
-                                  color: AppColors.pine,
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                request.recipientName,
+                                style: const TextStyle(color: AppColors.mist),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                formatRequestDateTime(request.requestedAt),
+                                style: const TextStyle(
+                                  color: AppColors.slate,
+                                  fontSize: 12,
                                 ),
+                              ),
+                              const SizedBox(height: AppSpacing.sm),
+                              Wrap(
+                                spacing: AppSpacing.sm,
+                                runSpacing: AppSpacing.xs,
+                                children: [
+                                  _RequestChip(
+                                    label: titleCaseLabel(request.requestStatus),
+                                    color: requestStatusColor(request.requestStatus),
+                                  ),
+                                  if (request.hubId.isNotEmpty)
+                                    _RequestChip(
+                                      label: 'Hub linked',
+                                      color: AppColors.pine,
+                                    ),
+                                ],
+                              ),
                             ],
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          color: AppColors.mist,
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      color: AppColors.mist,
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          );
-        },
+          ),
+          if (_requests.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _PaginationBar(
+              currentPage: _currentPage,
+              totalPages: _totalPages,
+              onPrevious:
+                  _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
+              onNext: _currentPage + 1 < _totalPages
+                  ? () => _goToPage(_currentPage + 1)
+                  : null,
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -423,6 +549,7 @@ class DonorIncomingRequestRecord {
     required this.hubName,
     required this.requestNote,
     required this.requestStatus,
+    required this.handoverStatus,
     required this.requestedAt,
     required this.updatedAt,
   });
@@ -444,6 +571,7 @@ class DonorIncomingRequestRecord {
   final String hubName;
   final String requestNote;
   final String requestStatus;
+  final String handoverStatus;
   final DateTime? requestedAt;
   final DateTime? updatedAt;
 }
@@ -540,4 +668,44 @@ Widget itemImageFallback() {
       size: 28,
     ),
   );
+}
+
+class _PaginationBar extends StatelessWidget {
+  const _PaginationBar({
+    required this.currentPage,
+    required this.totalPages,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final int currentPage;
+  final int totalPages;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          'Page ${currentPage + 1} of $totalPages',
+          style: const TextStyle(
+            color: AppColors.sand,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left_rounded),
+          color: onPrevious == null ? AppColors.slate : AppColors.mint,
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right_rounded),
+          color: onNext == null ? AppColors.slate : AppColors.mint,
+        ),
+      ],
+    );
+  }
 }
