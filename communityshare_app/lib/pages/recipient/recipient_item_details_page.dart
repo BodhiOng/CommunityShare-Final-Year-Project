@@ -163,7 +163,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
 
       QueryDocumentSnapshot<Map<String, dynamic>>? selected;
       for (final doc in docs) {
-        final status = doc.data()['requestStatus'].toString().trim() ?? '';
+        final status = doc.data()['requestStatus']?.toString().trim() ?? '';
         if (_isActiveRequestStatus(status)) {
           selected = doc;
           break;
@@ -332,7 +332,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 110),
+        padding: const EdgeInsets.only(bottom: 190),
         children: [
           AspectRatio(
             aspectRatio: 4 / 3,
@@ -527,51 +527,6 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                   const SizedBox(height: AppSpacing.lg),
                   const AppErrorState(
                     message: 'This item is past its expiry date and cannot be requested.',
-                  ),
-                ] else if (_currentRequest != null) ...[
-                  const SizedBox(height: AppSpacing.lg),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Your Request',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          Wrap(
-                            spacing: AppSpacing.sm,
-                            runSpacing: AppSpacing.sm,
-                            children: [
-                              _DetailPill(
-                                label: titleCaseLabel(_currentRequest!.requestStatus),
-                                color: requestStatusColor(
-                                  _currentRequest!.requestStatus,
-                                ),
-                              ),
-                              if (_currentRequest!.hubId.isNotEmpty)
-                                const _DetailPill(
-                                  label: 'Hub linked',
-                                  color: AppColors.sun,
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          Text(
-                            _requestSummaryCopy(_currentRequest!),
-                            style: const TextStyle(
-                              color: AppColors.mist,
-                              height: 1.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
                 ],
               ],
@@ -1067,28 +1022,57 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     }
 
     final request = _currentRequest;
-    if (request != null && _canTrackRequest(request.requestStatus)) {
-      return ElevatedButton.icon(
-        onPressed: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => RecipientRequestStatusPage(request: request),
+    if (request != null && request.requestStatus.toLowerCase() == 'pending') {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: null,
+              icon: const Icon(Icons.hourglass_top_rounded),
+              label: const Text('Request Pending'),
             ),
-          );
-          if (mounted) {
-            await _loadCurrentRequest();
-          }
-        },
-        icon: const Icon(Icons.timeline_outlined),
-        label: const Text('Track Request Status'),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => RecipientRequestStatusPage(request: request),
+                  ),
+                );
+                if (mounted) {
+                  await _loadCurrentRequest();
+                }
+              },
+              icon: const Icon(Icons.timeline_outlined),
+              label: const Text('View Request Status'),
+            ),
+          ),
+        ],
       );
     }
 
-    if (request != null && request.requestStatus.toLowerCase() == 'pending') {
-      return ElevatedButton.icon(
-        onPressed: null,
-        icon: const Icon(Icons.hourglass_top_rounded),
-        label: const Text('Request Pending'),
+    if (request != null && _canTrackRequest(request.requestStatus)) {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: () async {
+            await Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => RecipientRequestStatusPage(request: request),
+              ),
+            );
+            if (mounted) {
+              await _loadCurrentRequest();
+            }
+          },
+          icon: const Icon(Icons.timeline_outlined),
+          label: const Text('Track Request Status'),
+        ),
       );
     }
 
@@ -1103,26 +1087,6 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
           : const Icon(Icons.volunteer_activism_outlined),
       label: Text(item.isAvailable ? 'Request Item' : 'Not Requestable'),
     );
-  }
-
-  String _requestSummaryCopy(RecipientRequestRecord request) {
-    switch (request.requestStatus.toLowerCase()) {
-      case 'approved':
-        return 'Your request has been approved. Open request status to follow handover progress.';
-      case 'delivering':
-      case 'delivering_to_hub':
-      case 'delivering_to_recipient':
-      case 'item_at_community_hub':
-      case 'completed':
-        return 'This request is already in the handover flow. Open request status for the latest updates.';
-      case 'pending':
-        return 'Your request is waiting for donor approval.';
-      case 'rejected':
-      case 'cancelled':
-        return 'This request is no longer active. You can submit another request if the item is available again.';
-      default:
-        return 'Review the latest request status before taking another action.';
-    }
   }
 
   static bool _isActiveRequestStatus(String status) {

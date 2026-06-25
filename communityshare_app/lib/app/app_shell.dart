@@ -260,15 +260,31 @@ class _RecipientRequestStatusLauncherPageState
     extends State<_RecipientRequestStatusLauncherPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final TextEditingController _searchController = TextEditingController();
 
   bool _isLoading = true;
   String _errorMessage = '';
   List<RecipientRequestRecord> _requests = const [];
+  List<RecipientRequestRecord> _filteredRequests = const [];
+  int _currentPage = 0;
+  bool _showFilters = false;
+  String _selectedCategory = 'all';
+  String _selectedStatus = 'all';
+
+  static const int _requestsPerPage = 8;
 
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(_filterRequests);
     _loadRequests();
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_filterRequests);
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadRequests() async {
@@ -349,6 +365,13 @@ class _RecipientRequestStatusLauncherPageState
 
       setState(() {
         _requests = records;
+        _filteredRequests = _applyFilters(
+          records,
+          _searchController.text,
+          _selectedCategory,
+          _selectedStatus,
+        );
+        _currentPage = 0;
         _isLoading = false;
       });
     } catch (error) {
@@ -375,7 +398,160 @@ class _RecipientRequestStatusLauncherPageState
       );
     }
 
-    final active = _requests.where((request) {
+    if (_requests.isEmpty) {
+      return const AppEmptyState(
+        icon: Icons.timeline_outlined,
+        title: 'No active requests',
+        message: 'Approved requests will appear here so you can track handover progress.',
+      );
+    }
+
+    if (_filteredRequests.isEmpty) {
+      return RefreshIndicator(
+        color: AppColors.mint,
+        onRefresh: _loadRequests,
+        child: ListView(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search by item, status, or category',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () => _searchController.clear(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            _buildHeaderControls(),
+            if (_showFilters) ...[
+              const SizedBox(height: AppSpacing.md),
+              _buildFilters(),
+            ],
+            const SizedBox(height: AppSpacing.lg),
+            const AppEmptyState(
+              icon: Icons.search_off_rounded,
+              title: 'No matching requests',
+              message: 'Try a different search term.',
+            ),
+          ],
+        ),
+      );
+    }
+
+    final paginated = _paginatedRequests;
+
+    return RefreshIndicator(
+      color: AppColors.mint,
+      onRefresh: _loadRequests,
+      child: ListView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        children: [
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search by item, status, or category',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: () => _searchController.clear(),
+                      icon: const Icon(Icons.close_rounded),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          _buildHeaderControls(),
+          if (_showFilters) ...[
+            const SizedBox(height: AppSpacing.md),
+            _buildFilters(),
+          ],
+          const SizedBox(height: AppSpacing.lg),
+          ...paginated.map(
+            (request) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: Card(
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(AppSpacing.md),
+                  title: Text(request.itemTitle),
+                  subtitle: Text(
+                    '${titleCaseLabel(request.requestStatus)} • ${formatCategoryLabel(request.itemCategory)}',
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => RecipientRequestStatusPage(request: request),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _PaginationBar(
+            currentPage: _currentPage,
+            totalPages: _totalPages,
+            onPrevious:
+                _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
+            onNext: _currentPage + 1 < _totalPages
+                ? () => _goToPage(_currentPage + 1)
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderControls() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _HeaderPill(
+            icon: Icons.search_rounded,
+            label: '${_filteredRequests.length} shown',
+          ),
+          const SizedBox(width: AppSpacing.md),
+          TextButton.icon(
+            onPressed: () {
+              setState(() {
+                _showFilters = !_showFilters;
+              });
+            },
+            icon: Icon(
+              _showFilters ? Icons.filter_alt_off_rounded : Icons.tune_rounded,
+            ),
+            label: Text(_showFilters ? 'Hide filters' : 'Filters'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _filterRequests() {
+    setState(() {
+      _filteredRequests = _applyFilters(
+        _requests,
+        _searchController.text,
+        _selectedCategory,
+        _selectedStatus,
+      );
+      _currentPage = 0;
+    });
+  }
+
+  List<RecipientRequestRecord> _applyFilters(
+    List<RecipientRequestRecord> requests,
+    String query,
+    String selectedCategory,
+    String selectedStatus,
+  ) {
+    final normalizedQuery = query.trim().toLowerCase();
+    final active = requests.where((request) {
       final status = request.requestStatus.toLowerCase();
       return status == 'approved' ||
           status == 'reserved' ||
@@ -386,39 +562,165 @@ class _RecipientRequestStatusLauncherPageState
           status == 'completed';
     }).toList(growable: false);
 
-    if (active.isEmpty) {
-      return const AppEmptyState(
-        icon: Icons.timeline_outlined,
-        title: 'No active requests',
-        message: 'Approved requests will appear here so you can track handover progress.',
-      );
-    }
+    return active.where((request) {
+      final category = request.itemCategory.toLowerCase();
+      final status = request.requestStatus.toLowerCase();
 
-    return RefreshIndicator(
-      color: AppColors.mint,
-      onRefresh: _loadRequests,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        itemCount: active.length,
-        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
-        itemBuilder: (context, index) {
-          final request = active[index];
-          return Card(
-            child: ListTile(
-              contentPadding: const EdgeInsets.all(AppSpacing.md),
-              title: Text(request.itemTitle),
-              subtitle: Text('${titleCaseLabel(request.requestStatus)} • ${request.itemCategory}'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => RecipientRequestStatusPage(request: request),
-                ),
+      if (selectedCategory != 'all' && category != selectedCategory) {
+        return false;
+      }
+
+      if (selectedStatus != 'all' && status != selectedStatus) {
+        return false;
+      }
+
+      if (normalizedQuery.isEmpty) {
+        return true;
+      }
+
+      return request.itemTitle.toLowerCase().contains(normalizedQuery) ||
+          request.requestStatus.toLowerCase().contains(normalizedQuery) ||
+          request.itemCategory.toLowerCase().contains(normalizedQuery) ||
+          request.itemId.toLowerCase().contains(normalizedQuery) ||
+          request.hubId.toLowerCase().contains(normalizedQuery) ||
+          request.requestNote.toLowerCase().contains(normalizedQuery);
+    }).toList(growable: false);
+  }
+
+  List<String> get _categories {
+    final values = _requests
+        .map((request) => request.itemCategory.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return ['all', ...values];
+  }
+
+  Widget _buildFilters() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: _selectedCategory,
+              decoration: const InputDecoration(
+                labelText: 'Category',
               ),
+              items: _categories
+                  .map(
+                    (option) => DropdownMenuItem<String>(
+                      value: option,
+                      child: Text(
+                        option == 'all'
+                            ? 'All categories'
+                            : formatCategoryLabel(option),
+                      ),
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+                setState(() {
+                  _selectedCategory = value;
+                  _currentPage = 0;
+                  _filteredRequests = _applyFilters(
+                    _requests,
+                    _searchController.text,
+                    _selectedCategory,
+                    _selectedStatus,
+                  );
+                });
+              },
             ),
-          );
-        },
+            const SizedBox(height: AppSpacing.md),
+            DropdownButtonFormField<String>(
+              initialValue: _selectedStatus,
+              decoration: const InputDecoration(
+                labelText: 'Status',
+              ),
+              items: const [
+                DropdownMenuItem(value: 'all', child: Text('All statuses')),
+                DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                DropdownMenuItem(value: 'approved', child: Text('Approved')),
+                DropdownMenuItem(value: 'reserved', child: Text('Reserved')),
+                DropdownMenuItem(value: 'delivering', child: Text('Delivering')),
+                DropdownMenuItem(
+                  value: 'delivering_to_hub',
+                  child: Text('Delivering to hub'),
+                ),
+                DropdownMenuItem(
+                  value: 'delivering_to_recipient',
+                  child: Text('Delivering to recipient'),
+                ),
+                DropdownMenuItem(
+                  value: 'item_at_community_hub',
+                  child: Text('Item at community hub'),
+                ),
+                DropdownMenuItem(value: 'completed', child: Text('Completed')),
+              ],
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+                setState(() {
+                  _selectedStatus = value;
+                  _currentPage = 0;
+                  _filteredRequests = _applyFilters(
+                    _requests,
+                    _searchController.text,
+                    _selectedCategory,
+                    _selectedStatus,
+                  );
+                });
+              },
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  List<RecipientRequestRecord> get _paginatedRequests {
+    final start = _currentPage * _requestsPerPage;
+    if (start >= _filteredRequests.length) {
+      return const [];
+    }
+    final end = (start + _requestsPerPage).clamp(0, _filteredRequests.length);
+    return _filteredRequests.sublist(start, end);
+  }
+
+  int get _totalPages {
+    if (_filteredRequests.isEmpty) {
+      return 1;
+    }
+    return (_filteredRequests.length / _requestsPerPage).ceil();
+  }
+
+  void _goToPage(int page) {
+    if (page < 0 || page >= _totalPages) {
+      return;
+    }
+    setState(() => _currentPage = page);
+  }
+
+  static String formatCategoryLabel(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return 'Unknown';
+    }
+    return trimmed
+        .split('_')
+        .map((part) {
+          if (part.isEmpty) {
+            return part;
+          }
+          return '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}';
+        })
+        .join(' ');
   }
 
   static List<List<String>> _chunkStrings(List<String> values, int size) {
@@ -1071,6 +1373,48 @@ class _PaginationBar extends StatelessWidget {
           color: onNext == null ? AppColors.slate : AppColors.mint,
         ),
       ],
+    );
+  }
+}
+
+class _HeaderPill extends StatelessWidget {
+  const _HeaderPill({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.forest,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.mint.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: AppColors.mint),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.sand,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

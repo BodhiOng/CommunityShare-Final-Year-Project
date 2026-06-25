@@ -26,6 +26,9 @@ class _RecipientBrowseCommunityHubsPageState
   bool _isLoading = true;
   String _errorMessage = '';
   List<CommunityHubBrowseRecord> _hubs = const [];
+  int _currentPage = 0;
+
+  static const int _hubsPerPage = 8;
 
   @override
   void initState() {
@@ -62,6 +65,7 @@ class _RecipientBrowseCommunityHubsPageState
 
       setState(() {
         _hubs = hubs;
+        _currentPage = 0;
         _isLoading = false;
       });
     } catch (error) {
@@ -101,13 +105,15 @@ class _RecipientBrowseCommunityHubsPageState
       );
     }
 
+    final paginatedHubs = _paginatedHubs;
+
     return RefreshIndicator(
       color: AppColors.mint,
       onRefresh: _loadHubs,
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
-          for (final hub in _hubs) ...[
+          for (final hub in paginatedHubs) ...[
             _HubCard(
               hub: hub,
               isSelected: hub.hubId == widget.selectedHubId,
@@ -115,6 +121,18 @@ class _RecipientBrowseCommunityHubsPageState
               onTap: () => _handleHubTap(hub),
             ),
             const SizedBox(height: AppSpacing.md),
+          ],
+          if (_hubs.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _PaginationBar(
+              currentPage: _currentPage,
+              totalPages: _totalPages,
+              onPrevious:
+                  _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
+              onNext: _currentPage + 1 < _totalPages
+                  ? () => _goToPage(_currentPage + 1)
+                  : null,
+            ),
           ],
         ],
       ),
@@ -213,6 +231,29 @@ class _RecipientBrowseCommunityHubsPageState
         );
       },
     );
+  }
+
+  List<CommunityHubBrowseRecord> get _paginatedHubs {
+    final start = _currentPage * _hubsPerPage;
+    if (start >= _hubs.length) {
+      return const [];
+    }
+    final end = (start + _hubsPerPage).clamp(0, _hubs.length);
+    return _hubs.sublist(start, end);
+  }
+
+  int get _totalPages {
+    if (_hubs.isEmpty) {
+      return 1;
+    }
+    return (_hubs.length / _hubsPerPage).ceil();
+  }
+
+  void _goToPage(int page) {
+    if (page < 0 || page >= _totalPages) {
+      return;
+    }
+    setState(() => _currentPage = page);
   }
 }
 
@@ -463,6 +504,46 @@ class _HubDetailRow extends StatelessWidget {
               height: 1.5,
             ),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PaginationBar extends StatelessWidget {
+  const _PaginationBar({
+    required this.currentPage,
+    required this.totalPages,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final int currentPage;
+  final int totalPages;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          'Page ${currentPage + 1} of $totalPages',
+          style: const TextStyle(
+            color: AppColors.sand,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left_rounded),
+          color: onPrevious == null ? AppColors.slate : AppColors.mint,
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right_rounded),
+          color: onNext == null ? AppColors.slate : AppColors.mint,
         ),
       ],
     );

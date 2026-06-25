@@ -24,6 +24,9 @@ class _RecipientBrowseItemsPageState extends State<RecipientBrowseItemsPage> {
   String? _errorMessage;
   bool _showFilters = false;
   List<ItemListing> _allListings = const [];
+  int _currentPage = 0;
+
+  static const int _itemsPerPage = 8;
 
   String _selectedCategory = 'All';
   String _selectedCondition = 'All';
@@ -72,6 +75,7 @@ class _RecipientBrowseItemsPageState extends State<RecipientBrowseItemsPage> {
 
       setState(() {
         _allListings = listings;
+        _currentPage = 0;
         _isLoading = false;
       });
     } catch (e) {
@@ -116,6 +120,24 @@ class _RecipientBrowseItemsPageState extends State<RecipientBrowseItemsPage> {
     }).toList(growable: false);
   }
 
+  List<ItemListing> get _paginatedListings {
+    final filtered = _filteredListings;
+    final start = _currentPage * _itemsPerPage;
+    if (start >= filtered.length) {
+      return const [];
+    }
+    final end = (start + _itemsPerPage).clamp(0, filtered.length);
+    return filtered.sublist(start, end);
+  }
+
+  int get _totalPages {
+    final filtered = _filteredListings;
+    if (filtered.isEmpty) {
+      return 1;
+    }
+    return (filtered.length / _itemsPerPage).ceil();
+  }
+
   List<String> get _categories {
     final values = _allListings
         .map((listing) => listing.category)
@@ -136,9 +158,21 @@ class _RecipientBrowseItemsPageState extends State<RecipientBrowseItemsPage> {
     return ['All', ...values];
   }
 
+  void _resetPagination() {
+    _currentPage = 0;
+  }
+
+  void _goToPage(int page) {
+    if (page < 0 || page >= _totalPages) {
+      return;
+    }
+    setState(() => _currentPage = page);
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _filteredListings;
+    final paginated = _paginatedListings;
 
     return RefreshIndicator(
       onRefresh: _fetchListings,
@@ -148,52 +182,49 @@ class _RecipientBrowseItemsPageState extends State<RecipientBrowseItemsPage> {
         children: [
           TextField(
             controller: _searchController,
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(_resetPagination),
             decoration: InputDecoration(
               hintText: 'Search by title, category, or description',
               prefixIcon: const Icon(Icons.search_rounded),
               suffixIcon: IconButton(
                 onPressed: () {
                   _searchController.clear();
-                  setState(() {});
+                  setState(_resetPagination);
                 },
                 icon: const Icon(Icons.close_rounded),
               ),
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          Row(
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: [
-                    _StatusChip(
-                      icon: Icons.schedule_rounded,
-                      label: 'Recent first',
-                    ),
-                    _StatusChip(
-                      icon: Icons.inventory_2_outlined,
-                      label: '${filtered.length} shown',
-                    ),
-                  ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _StatusChip(
+                  icon: Icons.schedule_rounded,
+                  label: 'Recent first',
                 ),
-              ),
-              TextButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _showFilters = !_showFilters;
-                  });
-                },
-                icon: Icon(
-                  _showFilters
-                      ? Icons.filter_alt_off_rounded
-                      : Icons.tune_rounded,
+                const SizedBox(width: AppSpacing.sm),
+                _StatusChip(
+                  icon: Icons.inventory_2_outlined,
+                  label: '${filtered.length} shown',
                 ),
-                label: Text(_showFilters ? 'Hide filters' : 'Filters'),
-              ),
-            ],
+                const SizedBox(width: AppSpacing.md),
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _showFilters = !_showFilters;
+                    });
+                  },
+                  icon: Icon(
+                    _showFilters
+                        ? Icons.filter_alt_off_rounded
+                        : Icons.tune_rounded,
+                  ),
+                  label: Text(_showFilters ? 'Hide filters' : 'Filters'),
+                ),
+              ],
+            ),
           ),
           if (_showFilters) ...[
             const SizedBox(height: AppSpacing.sm),
@@ -203,7 +234,7 @@ class _RecipientBrowseItemsPageState extends State<RecipientBrowseItemsPage> {
                 child: Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      value: _selectedAvailability,
+                      initialValue: _selectedAvailability,
                       decoration: const InputDecoration(
                         labelText: 'Availability',
                       ),
@@ -221,18 +252,19 @@ class _RecipientBrowseItemsPageState extends State<RecipientBrowseItemsPage> {
                         }
                         setState(() {
                           _selectedAvailability = value;
+                          _resetPagination();
                         });
                       },
                     ),
                     const SizedBox(height: AppSpacing.md),
                     DropdownButtonFormField<String>(
-                      value: _selectedCategory,
+                      initialValue: _selectedCategory,
                       decoration: const InputDecoration(labelText: 'Category'),
                       items: _categories
                           .map(
                             (option) => DropdownMenuItem<String>(
                               value: option,
-                              child: Text(option),
+                              child: Text(formatCategoryLabel(option)),
                             ),
                           )
                           .toList(),
@@ -242,12 +274,13 @@ class _RecipientBrowseItemsPageState extends State<RecipientBrowseItemsPage> {
                         }
                         setState(() {
                           _selectedCategory = value;
+                          _resetPagination();
                         });
                       },
                     ),
                     const SizedBox(height: AppSpacing.md),
                     DropdownButtonFormField<String>(
-                      value: _selectedCondition,
+                      initialValue: _selectedCondition,
                       decoration: const InputDecoration(labelText: 'Condition'),
                       items: _conditions
                           .map(
@@ -263,6 +296,7 @@ class _RecipientBrowseItemsPageState extends State<RecipientBrowseItemsPage> {
                         }
                         setState(() {
                           _selectedCondition = value;
+                          _resetPagination();
                         });
                       },
                     ),
@@ -296,12 +330,24 @@ class _RecipientBrowseItemsPageState extends State<RecipientBrowseItemsPage> {
               ),
             )
           else
-            ...filtered.map(
+            ...paginated.map(
               (listing) => Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.md),
                 child: _ListingCard(listing: listing),
               ),
             ),
+          if (filtered.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _PaginationBar(
+              currentPage: _currentPage,
+              totalPages: _totalPages,
+              onPrevious:
+                  _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
+              onNext: _currentPage + 1 < _totalPages
+                  ? () => _goToPage(_currentPage + 1)
+                  : null,
+            ),
+          ],
         ],
       ),
     );
@@ -365,7 +411,7 @@ class _ListingCard extends StatelessWidget {
                       spacing: AppSpacing.xs,
                       runSpacing: AppSpacing.xs,
                       children: [
-                        _PillLabel(label: listing.category),
+                        _PillLabel(label: formatCategoryLabel(listing.category)),
                         _PillLabel(
                           label: listing.isAvailable
                               ? 'Available'
@@ -461,6 +507,22 @@ class _PillLabel extends StatelessWidget {
   }
 }
 
+String formatCategoryLabel(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return 'Unknown';
+  }
+  return trimmed
+      .split('_')
+      .map((part) {
+        if (part.isEmpty) {
+          return part;
+        }
+        return '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}';
+      })
+      .join(' ');
+}
+
 class _StatusChip extends StatelessWidget {
   const _StatusChip({
     required this.icon,
@@ -502,6 +564,46 @@ class _StatusChip extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PaginationBar extends StatelessWidget {
+  const _PaginationBar({
+    required this.currentPage,
+    required this.totalPages,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final int currentPage;
+  final int totalPages;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          'Page ${currentPage + 1} of $totalPages',
+          style: const TextStyle(
+            color: AppColors.sand,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left_rounded),
+          color: onPrevious == null ? AppColors.slate : AppColors.mint,
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right_rounded),
+          color: onNext == null ? AppColors.slate : AppColors.mint,
+        ),
+      ],
     );
   }
 }

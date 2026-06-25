@@ -30,6 +30,9 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
   bool _isLoadingListings = true;
   Map<String, dynamic>? _donorData;
   List<ItemListing> _listings = const [];
+  int _currentPage = 0;
+
+  static const int _listingsPerPage = 8;
 
   @override
   void initState() {
@@ -94,6 +97,7 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
 
       setState(() {
         _listings = listings;
+        _currentPage = 0;
         _isLoadingListings = false;
       });
     } catch (_) {
@@ -111,6 +115,7 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
   @override
   Widget build(BuildContext context) {
     final activeListings = _listings.where((item) => item.isAvailable).length;
+    final paginatedListings = _paginatedListings;
 
     return Scaffold(
       appBar: AppBar(
@@ -179,7 +184,7 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
               message: 'This donor does not have any recorded listings yet.',
             )
           else
-            ..._listings.map(
+            ...paginatedListings.map(
               (item) => Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.md),
                 child: _ListingHistoryCard(
@@ -188,6 +193,18 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
                 ),
               ),
             ),
+          if (_listings.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _PaginationBar(
+              currentPage: _currentPage,
+              totalPages: _totalPages,
+              onPrevious:
+                  _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
+              onNext: _currentPage + 1 < _totalPages
+                  ? () => _goToPage(_currentPage + 1)
+                  : null,
+            ),
+          ],
         ],
       ),
     );
@@ -266,6 +283,29 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
     return (_donorData?['profileImageUrl'] as String?)?.trim() ?? '';
   }
 
+  List<ItemListing> get _paginatedListings {
+    final start = _currentPage * _listingsPerPage;
+    if (start >= _listings.length) {
+      return const [];
+    }
+    final end = (start + _listingsPerPage).clamp(0, _listings.length);
+    return _listings.sublist(start, end);
+  }
+
+  int get _totalPages {
+    if (_listings.isEmpty) {
+      return 1;
+    }
+    return (_listings.length / _listingsPerPage).ceil();
+  }
+
+  void _goToPage(int page) {
+    if (page < 0 || page >= _totalPages) {
+      return;
+    }
+    setState(() => _currentPage = page);
+  }
+
   static String _titleCaseLabel(String value) {
     return value
         .split(RegExp(r'[_\s]+'))
@@ -274,6 +314,46 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
       final lower = part.toLowerCase();
       return '${lower[0].toUpperCase()}${lower.substring(1)}';
     }).join(' ');
+  }
+}
+
+class _PaginationBar extends StatelessWidget {
+  const _PaginationBar({
+    required this.currentPage,
+    required this.totalPages,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final int currentPage;
+  final int totalPages;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          'Page ${currentPage + 1} of $totalPages',
+          style: const TextStyle(
+            color: AppColors.sand,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left_rounded),
+          color: onPrevious == null ? AppColors.slate : AppColors.mint,
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right_rounded),
+          color: onNext == null ? AppColors.slate : AppColors.mint,
+        ),
+      ],
+    );
   }
 }
 

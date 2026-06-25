@@ -19,19 +19,35 @@ class _HubHandoverConfirmationPageState
     extends State<HubHandoverConfirmationPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final TextEditingController _searchController = TextEditingController();
 
   bool _isLoading = true;
   String _errorMessage = '';
   String _hubDocId = '';
   String _hubId = '';
   String _hubName = '';
+  bool _showFilters = false;
   String? _savingRequestId;
   List<HubHandoverRecord> _requests = const [];
+  List<HubHandoverRecord> _filteredRequests = const [];
+  int _currentPage = 0;
+  String _selectedStatus = 'All';
+  String _selectedCategory = 'All';
+
+  static const int _requestsPerPage = 8;
 
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(_filterRequests);
     _loadRequests();
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_filterRequests);
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadRequests() async {
@@ -196,6 +212,8 @@ class _HubHandoverConfirmationPageState
         _hubId = hubId;
         _hubName = hubName;
         _requests = records;
+        _filteredRequests = _applyFilters(records);
+        _currentPage = 0;
         _savingRequestId = null;
         _isLoading = false;
       });
@@ -247,7 +265,7 @@ class _HubHandoverConfirmationPageState
     return result;
   }
 
-  Future<void> _confirmReceived(HubHandoverRecord record) async {
+  Future<bool> _confirmReceived(HubHandoverRecord record) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -269,10 +287,10 @@ class _HubHandoverConfirmationPageState
     );
 
     if (confirm != true) {
-      return;
+      return false;
     }
 
-    await _updateHandoverStatus(
+    return _updateHandoverStatus(
       record,
       nextRequestStatus: 'item_at_community_hub',
       nextHandoverStatus: 'item_at_community_hub',
@@ -285,7 +303,7 @@ class _HubHandoverConfirmationPageState
     );
   }
 
-  Future<void> _confirmClaimed(HubHandoverRecord record) async {
+  Future<bool> _confirmClaimed(HubHandoverRecord record) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -307,10 +325,10 @@ class _HubHandoverConfirmationPageState
     );
 
     if (confirm != true) {
-      return;
+      return false;
     }
 
-    await _updateHandoverStatus(
+    return _updateHandoverStatus(
       record,
       nextRequestStatus: 'completed',
       nextHandoverStatus: 'completed',
@@ -323,7 +341,7 @@ class _HubHandoverConfirmationPageState
     );
   }
 
-  Future<void> _updateHandoverStatus(
+  Future<bool> _updateHandoverStatus(
     HubHandoverRecord record, {
     required String nextRequestStatus,
     required String nextHandoverStatus,
@@ -336,7 +354,7 @@ class _HubHandoverConfirmationPageState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('You need to sign in before updating handover status.')),
       );
-      return;
+      return false;
     }
 
     setState(() {
@@ -388,16 +406,17 @@ class _HubHandoverConfirmationPageState
       await batch.commit();
 
       if (!mounted) {
-        return;
+        return false;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(successMessage)),
       );
       await _loadRequests();
+      return true;
     } catch (error) {
       if (!mounted) {
-        return;
+        return false;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -406,6 +425,7 @@ class _HubHandoverConfirmationPageState
       setState(() {
         _savingRequestId = null;
       });
+      return false;
     }
   }
 
@@ -450,6 +470,112 @@ class _HubHandoverConfirmationPageState
     return _firestore.collection('HANDOVER').doc('handover_${DateTime.now().millisecondsSinceEpoch}');
   }
 
+  void _filterRequests() {
+    setState(() {
+      _filteredRequests = _applyFilters(_requests);
+      _currentPage = 0;
+    });
+  }
+
+  List<HubHandoverRecord> _applyFilters(List<HubHandoverRecord> source) {
+    final normalizedQuery = _searchController.text.trim().toLowerCase();
+
+    return source.where((request) {
+      final haystack = <String>[
+        request.itemTitle,
+        request.itemCategory,
+        request.requestId,
+        request.recipientName,
+        request.donorName,
+        request.requestNote,
+        request.requestStatus,
+        request.handoverStatus,
+        request.availabilityStatus,
+      ].join(' ').toLowerCase();
+
+      final matchesSearch =
+          normalizedQuery.isEmpty || haystack.contains(normalizedQuery);
+      final matchesStatus = _selectedStatus == 'All' ||
+          _effectiveStatus(request) == _selectedStatus.toLowerCase();
+      final matchesCategory = _selectedCategory == 'All' ||
+          request.itemCategory.toLowerCase() == _selectedCategory.toLowerCase();
+
+      return matchesSearch && matchesStatus && matchesCategory;
+    }).toList(growable: false);
+  }
+
+  List<String> get _statusOptions {
+    final values = _requests
+        .map(_effectiveStatus)
+        .where((value) => value.trim().isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return ['All', ...values];
+  }
+
+  List<String> get _categoryOptions {
+    final values = _requests
+        .map((request) => request.itemCategory)
+        .where((value) => value.trim().isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return ['All', ...values];
+  }
+
+  List<HubHandoverRecord> get _paginatedRequests {
+    if (_filteredRequests.isEmpty) {
+      return const [];
+    }
+
+    final start = _currentPage * _requestsPerPage;
+    if (start >= _filteredRequests.length) {
+      return const [];
+    }
+
+    final end = (start + _requestsPerPage) > _filteredRequests.length
+        ? _filteredRequests.length
+        : start + _requestsPerPage;
+    return _filteredRequests.sublist(start, end);
+  }
+
+  int get _totalPages {
+    if (_filteredRequests.isEmpty) {
+      return 1;
+    }
+    return (_filteredRequests.length / _requestsPerPage).ceil();
+  }
+
+  void _goToPage(int page) {
+    final clamped = page.clamp(0, _totalPages - 1);
+    if (clamped == _currentPage) {
+      return;
+    }
+
+    setState(() {
+      _currentPage = clamped;
+    });
+  }
+
+  Future<void> _openHandoverDetails(HubHandoverRecord request) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => _HubHandoverDetailsPage(
+          request: request,
+          hubName: _hubName,
+          isSaving: _savingRequestId == request.requestId,
+          onConfirmReceived: _confirmReceived,
+          onConfirmClaimed: _confirmClaimed,
+        ),
+      ),
+    );
+
+    if (changed == true && mounted) {
+      await _loadRequests();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -485,16 +611,146 @@ class _HubHandoverConfirmationPageState
               message:
                   'Requests assigned to this hub will appear here once a donor starts the delivery.',
             )
-          else
-            for (final request in _requests) ...[
-              _HandoverCard(
-                request: request,
-                isSaving: _savingRequestId == request.requestId,
-                onConfirmReceived: () => _confirmReceived(request),
-                onConfirmClaimed: () => _confirmClaimed(request),
+          else ...[
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search by item, donor, recipient, or status',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: _searchController.clear,
+                        icon: const Icon(Icons.close_rounded),
+                      ),
               ),
-              const SizedBox(height: AppSpacing.md),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _HeaderPill(
+                    icon: Icons.inventory_2_outlined,
+                    label: '${_filteredRequests.length} shown',
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  _HeaderPill(
+                    icon: Icons.account_tree_outlined,
+                    label: 'Page ${_currentPage + 1} of $_totalPages',
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _showFilters = !_showFilters;
+                        _currentPage = 0;
+                      });
+                    },
+                    icon: Icon(
+                      _showFilters
+                          ? Icons.filter_alt_off_rounded
+                          : Icons.tune_rounded,
+                    ),
+                    label: Text(_showFilters ? 'Hide filters' : 'Filters'),
+                  ),
+                ],
+              ),
+            ),
+            if (_showFilters) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Column(
+                    children: [
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedStatus,
+                        decoration: const InputDecoration(
+                          labelText: 'Status',
+                        ),
+                        items: _statusOptions
+                            .map(
+                              (option) => DropdownMenuItem<String>(
+                                value: option,
+                                child: Text(
+                                  option == 'All'
+                                      ? option
+                                      : titleCaseLabel(option),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() {
+                            _selectedStatus = value;
+                            _filteredRequests = _applyFilters(_requests);
+                            _currentPage = 0;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedCategory,
+                        decoration: const InputDecoration(
+                          labelText: 'Category',
+                        ),
+                        items: _categoryOptions
+                            .map(
+                              (option) => DropdownMenuItem<String>(
+                                value: option,
+                                child: Text(
+                                  option == 'All'
+                                      ? option
+                                      : formatCategoryLabel(option),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() {
+                            _selectedCategory = value;
+                            _filteredRequests = _applyFilters(_requests);
+                            _currentPage = 0;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
+            const SizedBox(height: AppSpacing.md),
+            if (_filteredRequests.isEmpty)
+              const AppEmptyState(
+                icon: Icons.search_off_rounded,
+                title: 'No matching handovers',
+                message: 'Try a different search term to find the handover you need.',
+              )
+            else ...[
+              for (final request in _paginatedRequests) ...[
+                _HandoverCard(
+                  request: request,
+                  onTap: () => _openHandoverDetails(request),
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ],
+              _PaginationBar(
+                currentPage: _currentPage,
+                totalPages: _totalPages,
+                onPrevious: _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
+                onNext: (_currentPage + 1) < _totalPages
+                    ? () => _goToPage(_currentPage + 1)
+                    : null,
+              ),
+            ],
+          ],
         ],
       ),
     );
@@ -591,6 +847,22 @@ class _HubHandoverConfirmationPageState
   }
 }
 
+String formatCategoryLabel(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return 'Others';
+  }
+
+  return trimmed
+      .split('_')
+      .where((part) => part.isNotEmpty)
+      .map(
+        (part) =>
+            '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
+      )
+      .join(' ');
+}
+
 class HubHandoverRecord {
   const HubHandoverRecord({
     required this.requestId,
@@ -646,15 +918,110 @@ class HubHandoverRecord {
 class _HandoverCard extends StatelessWidget {
   const _HandoverCard({
     required this.request,
+    required this.onTap,
+  });
+
+  final HubHandoverRecord request;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveStatus =
+        _HubHandoverConfirmationPageState._effectiveStatus(request);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      onTap: onTap,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: request.itemPhotoUrl.isNotEmpty
+                      ? ImageUtils.base64ToImage(
+                          request.itemPhotoUrl,
+                          fit: BoxFit.cover,
+                          errorWidget: itemImageFallback(),
+                        )
+                      : itemImageFallback(),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      request.itemTitle,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        _StatusPill(
+                          label: titleCaseLabel(effectiveStatus),
+                          color: requestStatusColor(effectiveStatus),
+                        ),
+                        _StatusPill(
+                          label: formatCategoryLabel(request.itemCategory),
+                          color: AppColors.mint,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      '${request.recipientName} • ${request.donorName}',
+                      style: const TextStyle(
+                        color: AppColors.mist,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Updated ${formatRequestDateTime(request.updatedAt)}',
+                      style: const TextStyle(color: AppColors.slate),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.mint,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HubHandoverDetailsPage extends StatelessWidget {
+  const _HubHandoverDetailsPage({
+    required this.request,
+    required this.hubName,
     required this.isSaving,
     required this.onConfirmReceived,
     required this.onConfirmClaimed,
   });
 
   final HubHandoverRecord request;
+  final String hubName;
   final bool isSaving;
-  final VoidCallback onConfirmReceived;
-  final VoidCallback onConfirmClaimed;
+  final Future<bool> Function(HubHandoverRecord record) onConfirmReceived;
+  final Future<bool> Function(HubHandoverRecord record) onConfirmClaimed;
 
   @override
   Widget build(BuildContext context) {
@@ -663,95 +1030,119 @@ class _HandoverCard extends StatelessWidget {
     final canConfirmReceived = effectiveStatus == 'delivering_to_hub';
     final canConfirmClaimed = effectiveStatus == 'item_at_community_hub';
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                  child: SizedBox(
-                    width: 72,
-                    height: 72,
-                    child: request.itemPhotoUrl.isNotEmpty
-                        ? ImageUtils.base64ToImage(
-                            request.itemPhotoUrl,
-                            fit: BoxFit.cover,
-                            errorWidget: itemImageFallback(),
-                          )
-                        : itemImageFallback(),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
+    return Scaffold(
+      appBar: AppBar(title: const Text('Handover Details')),
+      body: ListView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        request.itemTitle,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        child: SizedBox(
+                          width: 88,
+                          height: 88,
+                          child: request.itemPhotoUrl.isNotEmpty
+                              ? ImageUtils.base64ToImage(
+                                  request.itemPhotoUrl,
+                                  fit: BoxFit.cover,
+                                  errorWidget: itemImageFallback(),
+                                )
+                              : itemImageFallback(),
+                        ),
                       ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Wrap(
-                        spacing: AppSpacing.sm,
-                        runSpacing: AppSpacing.xs,
-                        children: [
-                          _StatusPill(
-                            label: titleCaseLabel(effectiveStatus),
-                            color: requestStatusColor(effectiveStatus),
-                          ),
-                          _StatusPill(
-                            label: titleCaseLabel(request.availabilityStatus),
-                            color: requestStatusColor(request.availabilityStatus),
-                          ),
-                        ],
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              request.itemTitle,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineSmall
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            Wrap(
+                              spacing: AppSpacing.sm,
+                              runSpacing: AppSpacing.xs,
+                              children: [
+                                _StatusPill(
+                                  label: titleCaseLabel(effectiveStatus),
+                                  color: requestStatusColor(effectiveStatus),
+                                ),
+                                _StatusPill(
+                                  label: titleCaseLabel(request.availabilityStatus),
+                                  color: requestStatusColor(request.availabilityStatus),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            Text(
+                              'Request ID: ${request.requestId}',
+                              style: const TextStyle(color: AppColors.slate),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _InfoLine(label: 'Recipient', value: request.recipientName),
-            _InfoLine(label: 'Recipient Phone', value: request.recipientPhone),
-            _InfoLine(label: 'Donor', value: request.donorName),
-            _InfoLine(label: 'Donor Phone', value: request.donorPhone),
-            _InfoLine(label: 'Category', value: titleCaseLabel(request.itemCategory)),
-            _InfoLine(label: 'Quantity', value: '${request.itemQuantity}'),
-            _InfoLine(label: 'Requested', value: formatRequestDateTime(request.requestedAt)),
-            _InfoLine(label: 'Updated', value: formatRequestDateTime(request.updatedAt)),
-            if (request.requestNote.isNotEmpty)
-              _InfoLine(label: 'Note', value: request.requestNote),
-            const SizedBox(height: AppSpacing.md),
-            if (isSaving)
-              const AppLoadingState(message: 'Updating handover...')
-            else if (canConfirmReceived)
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: onConfirmReceived,
-                  icon: const Icon(Icons.inventory_rounded),
-                  label: const Text('Mark Received by Hub'),
-                ),
-              )
-            else if (canConfirmClaimed)
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: onConfirmClaimed,
-                  icon: const Icon(Icons.assignment_turned_in_outlined),
-                  label: const Text('Mark Claimed by Recipient'),
-                ),
+                  const SizedBox(height: AppSpacing.lg),
+                  _InfoLine(label: 'Hub', value: hubName.isNotEmpty ? hubName : 'Community Hub'),
+                  _InfoLine(label: 'Recipient', value: request.recipientName),
+                  _InfoLine(label: 'Recipient Phone', value: request.recipientPhone),
+                  _InfoLine(label: 'Donor', value: request.donorName),
+                  _InfoLine(label: 'Donor Phone', value: request.donorPhone),
+                  _InfoLine(label: 'Category', value: formatCategoryLabel(request.itemCategory)),
+                  _InfoLine(label: 'Quantity', value: '${request.itemQuantity}'),
+                  _InfoLine(label: 'Requested', value: formatRequestDateTime(request.requestedAt)),
+                  _InfoLine(label: 'Updated', value: formatRequestDateTime(request.updatedAt)),
+                  if (request.requestNote.isNotEmpty)
+                    _InfoLine(label: 'Note', value: request.requestNote),
+                ],
               ),
-          ],
-        ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (isSaving)
+            const AppLoadingState(message: 'Updating handover...')
+          else if (canConfirmReceived)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final changed = await onConfirmReceived(request);
+                  if (changed && context.mounted) {
+                    Navigator.of(context).pop(true);
+                  }
+                },
+                icon: const Icon(Icons.inventory_rounded),
+                label: const Text('Mark Received by Hub'),
+              ),
+            )
+          else if (canConfirmClaimed)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final changed = await onConfirmClaimed(request);
+                  if (changed && context.mounted) {
+                    Navigator.of(context).pop(true);
+                  }
+                },
+                icon: const Icon(Icons.assignment_turned_in_outlined),
+                label: const Text('Mark Claimed by Recipient'),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -824,6 +1215,85 @@ class _InfoLine extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _HeaderPill extends StatelessWidget {
+  const _HeaderPill({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.forest,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.mint.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: AppColors.mint),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.sand,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaginationBar extends StatelessWidget {
+  const _PaginationBar({
+    required this.currentPage,
+    required this.totalPages,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final int currentPage;
+  final int totalPages;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          'Page ${currentPage + 1} of $totalPages',
+          style: const TextStyle(
+            color: AppColors.sand,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const Spacer(),
+        IconButton(
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left_rounded),
+          color: onPrevious == null ? AppColors.slate : AppColors.mint,
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right_rounded),
+          color: onNext == null ? AppColors.slate : AppColors.mint,
+        ),
+      ],
     );
   }
 }
