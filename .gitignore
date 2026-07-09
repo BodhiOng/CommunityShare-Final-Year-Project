@@ -123,6 +123,8 @@ scripts/
 
 # Firebase credentials and app config
 /communityshare_app/android/app/google-services.json
+/communityshare_app/lib/app/google-services.json
 /communityshare_app/serviceAccountKey.json  
+/functions/node_modules/
 
 .vscode/
