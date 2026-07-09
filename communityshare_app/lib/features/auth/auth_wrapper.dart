@@ -2,13 +2,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import 'app/app_shell.dart';
-import 'app/user_role.dart';
-import 'app/user_role_resolver.dart';
-import 'deleted_account_page.dart';
+import '../../app/app_shell.dart';
+import '../../app/user_role.dart';
+import '../../app/user_role_resolver.dart';
+import '../account/deleted_account_page.dart';
 import 'landing_page.dart';
 import 'login_page.dart';
-import 'widgets/state_widgets.dart';
+import '../account/suspended_account_page.dart';
+import '../../widgets/state_widgets.dart';
 
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
@@ -59,14 +60,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
     return resolved;
   }
 
-  Future<bool> _isDeletedUser(String uid) async {
+  Future<_AccountGateStatus> _getAccountGateStatus(String uid) async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('USER').doc(uid).get();
       final status = snapshot.data()?['status']?.toString().trim().toLowerCase() ?? '';
-      return status == 'deleted';
+      if (status == 'deleted') {
+        return _AccountGateStatus.deleted;
+      }
+      if (status == 'suspended') {
+        return _AccountGateStatus.suspended;
+      }
+      return _AccountGateStatus.active;
     } catch (error) {
-      debugPrint('Unable to read deleted status for $uid: $error');
-      return false;
+      debugPrint('Unable to read account status for $uid: $error');
+      return _AccountGateStatus.active;
     }
   }
 
@@ -92,17 +99,21 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
 
         final user = snapshot.data!;
-        return FutureBuilder<bool>(
-          future: _isDeletedUser(user.uid),
-          builder: (context, deletedSnapshot) {
-            if (deletedSnapshot.connectionState == ConnectionState.waiting) {
+        return FutureBuilder<_AccountGateStatus>(
+          future: _getAccountGateStatus(user.uid),
+          builder: (context, accountSnapshot) {
+            if (accountSnapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
                 body: AppLoadingState(message: 'Preparing your workspace...'),
               );
             }
 
-            if (deletedSnapshot.data == true) {
+            final accountStatus = accountSnapshot.data ?? _AccountGateStatus.active;
+            if (accountStatus == _AccountGateStatus.deleted) {
               return const DeletedAccountPage();
+            }
+            if (accountStatus == _AccountGateStatus.suspended) {
+              return const SuspendedAccountPage();
             }
 
             return FutureBuilder<UserRole>(
@@ -135,4 +146,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
       },
     );
   }
+}
+
+enum _AccountGateStatus {
+  active,
+  suspended,
+  deleted,
 }

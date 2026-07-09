@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -32,6 +33,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
   final TextEditingController _searchController = TextEditingController();
 
   List<_ManagedUserRecord> _users = const [];
@@ -148,6 +150,10 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     });
   }
 
+  bool _isSignedInAdmin(_ManagedUserRecord user) {
+    return _auth.currentUser?.uid == user.userId;
+  }
+
   Future<_RoleSpecificDetails> _loadRoleSpecificDetails(
     String userId,
     String role,
@@ -233,10 +239,10 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     }
 
     final formKey = GlobalKey<FormState>();
-    final userIdController = TextEditingController(text: user?.userId ?? '');
     final fullNameController =
         TextEditingController(text: user?.fullName ?? '');
     final emailController = TextEditingController(text: user?.email ?? '');
+    final passwordController = TextEditingController();
     final phoneNumberController =
         TextEditingController(text: user?.phoneNumber ?? '');
     final recipientTypeController =
@@ -277,10 +283,10 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
               try {
                 await _saveUser(
                   existingUser: user,
-                  userId: userIdController.text.trim(),
+                  userId: user?.userId ?? '',
                   fullName: fullNameController.text.trim(),
                   email: emailController.text.trim(),
-                  passwordHash: '',
+                  password: passwordController.text,
                   phoneNumber: phoneNumberController.text.trim(),
                   role: role,
                   status: status,
@@ -325,7 +331,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'This page manages USER and linked role-table documents. Use the matching auth UID as User ID when creating a new record.',
+                          'This page manages USER and linked role-table documents. New users are created through Firebase Functions so Authentication and Firestore stay aligned.',
                           style: TextStyle(
                             color: AppColors.mist,
                             height: 1.5,
@@ -353,18 +359,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                         if (user == null) ...[
                           const SizedBox(height: AppSpacing.md),
                           AppTextField(
-                            controller: userIdController,
-                            label: 'User ID',
-                            prefixIcon: const Icon(Icons.badge_outlined),
-                            validator: (value) {
-                              if ((value ?? '').trim().isEmpty) {
-                                return 'Enter a user ID.';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          AppTextField(
                             controller: emailController,
                             label: 'Email',
                             keyboardType: TextInputType.emailAddress,
@@ -384,10 +378,26 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                               return null;
                             },
                           ),
+                          const SizedBox(height: AppSpacing.md),
+                          AppTextField(
+                            controller: passwordController,
+                            label: 'Temporary Password',
+                            obscureText: true,
+                            prefixIcon: const Icon(Icons.lock_outline_rounded),
+                            validator: (value) {
+                              if (user != null) {
+                                return null;
+                              }
+                              if ((value ?? '').trim().length < 6) {
+                                return 'Enter a password with at least 6 characters.';
+                              }
+                              return null;
+                            },
+                          ),
                         ],
                         const SizedBox(height: AppSpacing.md),
                         DropdownButtonFormField<String>(
-                          value: role,
+                          initialValue: role,
                           decoration: const InputDecoration(
                             labelText: 'Role',
                             prefixIcon:
@@ -409,15 +419,14 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                               role = value;
                               if (role == 'hub' &&
                                   hubIdController.text.trim().isEmpty) {
-                                hubIdController.text =
-                                    userIdController.text.trim();
+                                hubIdController.text = user?.userId ?? '';
                               }
                             });
                           },
                         ),
                         const SizedBox(height: AppSpacing.md),
                         DropdownButtonFormField<String>(
-                          value: status,
+                          initialValue: status,
                           decoration: const InputDecoration(
                             labelText: 'Status',
                             prefixIcon: Icon(Icons.toggle_on_outlined),
@@ -572,9 +581,9 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
       },
     );
 
-    userIdController.dispose();
     fullNameController.dispose();
     emailController.dispose();
+    passwordController.dispose();
     phoneNumberController.dispose();
     recipientTypeController.dispose();
     hubIdController.dispose();
@@ -601,7 +610,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     required String userId,
     required String fullName,
     required String email,
-    required String passwordHash,
+    required String password,
     required String phoneNumber,
     required String role,
     required String status,
@@ -609,21 +618,41 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     required _RoleSpecificDetails hubDetails,
     required _RoleSpecificDetails existingDetails,
   }) async {
-    final existingId = existingUser?.userId.trim() ?? '';
+    if (existingUser == null) {
+      await _createUserWithFunction(
+        email: email,
+        password: password,
+        fullName: fullName,
+        phoneNumber: phoneNumber,
+        role: role,
+        status: status,
+        recipientType: recipientType,
+        hubDetails: hubDetails,
+      );
+      return;
+    }
+
+    final existingId = existingUser.userId.trim();
     if (existingId.isNotEmpty && existingId != userId) {
       throw Exception('User ID cannot be changed for an existing record.');
     }
 
-    final userRef = _firestore.collection('USER').doc(userId);
-    final existingDoc = await userRef.get();
-    if (existingUser == null && existingDoc.exists) {
-      throw Exception('A USER record with this ID already exists.');
+    if (existingUser.role != 'admin' && role == 'admin') {
+      await _promoteUserToAdminWithCleanup(
+        userId: userId,
+        fullName: fullName,
+        email: email,
+        phoneNumber: phoneNumber,
+        status: status,
+      );
+      return;
     }
 
+    final userRef = _firestore.collection('USER').doc(userId);
     final batch = _firestore.batch();
-    final createdAt = existingUser?.createdAt == null
+    final createdAt = existingUser.createdAt == null
         ? FieldValue.serverTimestamp()
-        : Timestamp.fromDate(existingUser!.createdAt!);
+        : Timestamp.fromDate(existingUser.createdAt!);
 
     batch.set(
       userRef,
@@ -631,7 +660,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
         'userId': userId,
         'fullName': fullName,
         'email': email,
-        'passwordHash': passwordHash,
+        'passwordHash': existingUser.passwordHash,
         'phoneNumber': phoneNumber,
         'role': role,
         'status': status,
@@ -651,6 +680,58 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     );
 
     await batch.commit();
+  }
+
+  Future<void> _createUserWithFunction({
+    required String email,
+    required String password,
+    required String fullName,
+    required String phoneNumber,
+    required String role,
+    required String status,
+    required String recipientType,
+    required _RoleSpecificDetails hubDetails,
+  }) async {
+    try {
+      await _functions.httpsCallable('createManagedUser').call({
+        'email': email,
+        'password': password,
+        'fullName': fullName,
+        'phoneNumber': phoneNumber,
+        'role': role,
+        'status': status,
+        'recipientType': recipientType,
+        'hubDetails': {
+          'hubId': hubDetails.hubId,
+          'hubName': hubDetails.hubName,
+          'address': hubDetails.address,
+          'operatingHours': hubDetails.operatingHours,
+          'contactNumber': hubDetails.contactNumber,
+        },
+      });
+    } on FirebaseFunctionsException catch (error) {
+      throw Exception(error.message ?? 'Unable to create user.');
+    }
+  }
+
+  Future<void> _promoteUserToAdminWithCleanup({
+    required String userId,
+    required String fullName,
+    required String email,
+    required String phoneNumber,
+    required String status,
+  }) async {
+    try {
+      await _functions.httpsCallable('promoteManagedUserToAdmin').call({
+        'userId': userId,
+        'fullName': fullName,
+        'email': email,
+        'phoneNumber': phoneNumber,
+        'status': status,
+      });
+    } on FirebaseFunctionsException catch (error) {
+      throw Exception(error.message ?? 'Unable to promote user to admin.');
+    }
   }
 
   Future<void> _syncRoleTables({
@@ -759,7 +840,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
   }
 
   Future<void> _confirmDelete(_ManagedUserRecord user) async {
-    if (_auth.currentUser?.uid == user.userId) {
+    if (_isSignedInAdmin(user)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('The signed-in admin cannot delete their own record.'),
@@ -800,7 +881,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     }
 
     try {
-      await _cascadeDeleteUser(user);
+      await _deleteUserWithFunction(user.userId);
 
       if (!mounted) {
         return;
@@ -822,125 +903,13 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     }
   }
 
-  Future<void> _cascadeDeleteUser(_ManagedUserRecord user) async {
-    final operations = <DocumentReference<Object?>>[];
-    final updates = <MapEntry<DocumentReference<Object?>, Map<String, dynamic>>>[];
-
-    void addDelete(DocumentReference<Object?> ref) {
-      operations.add(ref);
-    }
-
-    void addUpdate(
-      DocumentReference<Object?> ref,
-      Map<String, dynamic> data,
-    ) {
-      updates.add(MapEntry(ref, data));
-    }
-
-    addUpdate(
-      _firestore.collection('USER').doc(user.userId),
-      {
-        'status': 'deleted',
-      },
-    );
-
-    Future<void> addCollectionDeletes(
-      String collection,
-      String field,
-      String value,
-    ) async {
-      final snapshot = await _firestore
-          .collection(collection)
-          .where(field, isEqualTo: value)
-          .get();
-      for (final doc in snapshot.docs) {
-        addDelete(doc.reference);
-      }
-    }
-
-    await addCollectionDeletes('DONOR', 'userId', user.userId);
-    await addCollectionDeletes('RECIPIENT', 'userId', user.userId);
-    await addCollectionDeletes('ADMIN', 'userId', user.userId);
-
-    final hubSnapshot = await _firestore
-        .collection('COMMUNITY_HUB')
-        .where('userId', isEqualTo: user.userId)
-        .get();
-    final hubIds = <String>{};
-    for (final doc in hubSnapshot.docs) {
-      final data = doc.data();
-      hubIds.add(_stringValue(data['hubId'], fallback: doc.id));
-      addDelete(doc.reference);
-    }
-
-    await addCollectionDeletes('ITEM_LISTING', 'donorId', user.userId);
-    await addCollectionDeletes('REPORT', 'reporterUserId', user.userId);
-    await addCollectionDeletes('REPORT', 'reportedUserId', user.userId);
-    await addCollectionDeletes(
-      'DONATION_STATUS_HISTORY',
-      'changedByUserId',
-      user.userId,
-    );
-
-    final recipientRequestSnapshot = await _firestore
-        .collection('ITEM_REQUEST')
-        .where('recipientId', isEqualTo: user.userId)
-        .get();
-    for (final doc in recipientRequestSnapshot.docs) {
-      addDelete(doc.reference);
-      final requestId = _stringValue(doc.data()['requestId'], fallback: doc.id);
-      await addCollectionDeletes('HANDOVER', 'requestId', requestId);
-      await addCollectionDeletes(
-        'DONATION_STATUS_HISTORY',
-        'requestId',
-        requestId,
-      );
-    }
-
-    for (final hubId in hubIds) {
-      final requestSnapshot = await _firestore
-          .collection('ITEM_REQUEST')
-          .where('hubId', isEqualTo: hubId)
-          .get();
-      for (final doc in requestSnapshot.docs) {
-        addDelete(doc.reference);
-        final requestId =
-            _stringValue(doc.data()['requestId'], fallback: doc.id);
-        await addCollectionDeletes('HANDOVER', 'requestId', requestId);
-        await addCollectionDeletes(
-          'DONATION_STATUS_HISTORY',
-          'requestId',
-          requestId,
-        );
-      }
-
-      await addCollectionDeletes('HANDOVER', 'hubId', hubId);
-      await addCollectionDeletes('ITEM_REQUEST', 'hubId', hubId);
-    }
-
-    await _commitDeleteOperations(operations, updates);
-  }
-
-  Future<void> _commitDeleteOperations(
-    List<DocumentReference<Object?>> operations,
-    List<MapEntry<DocumentReference<Object?>, Map<String, dynamic>>> updates,
-  ) async {
-    const batchLimit = 450;
-
-    if (updates.isNotEmpty) {
-      final batch = _firestore.batch();
-      for (final entry in updates) {
-        batch.set(entry.key, entry.value, SetOptions(merge: true));
-      }
-      await batch.commit();
-    }
-
-    for (var i = 0; i < operations.length; i += batchLimit) {
-      final batch = _firestore.batch();
-      for (final ref in operations.skip(i).take(batchLimit)) {
-        batch.delete(ref);
-      }
-      await batch.commit();
+  Future<void> _deleteUserWithFunction(String userId) async {
+    try {
+      await _functions.httpsCallable('deleteManagedUser').call({
+        'userId': userId,
+      });
+    } on FirebaseFunctionsException catch (error) {
+      throw Exception(error.message ?? 'Unable to delete user.');
     }
   }
 
@@ -1229,20 +1198,29 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                                             break;
                                         }
                                       },
-                                      itemBuilder: (context) => const [
-                                        PopupMenuItem<String>(
-                                          value: 'view',
-                                          child: Text('View details'),
-                                        ),
-                                        PopupMenuItem<String>(
-                                          value: 'edit',
-                                          child: Text('Edit user'),
-                                        ),
-                                        PopupMenuItem<String>(
-                                          value: 'delete',
-                                          child: Text('Delete user'),
-                                        ),
-                                      ],
+                                      itemBuilder: (context) {
+                                        final items = <PopupMenuEntry<String>>[
+                                          const PopupMenuItem<String>(
+                                            value: 'view',
+                                            child: Text('View details'),
+                                          ),
+                                          const PopupMenuItem<String>(
+                                            value: 'edit',
+                                            child: Text('Edit user'),
+                                          ),
+                                        ];
+
+                                        if (!_isSignedInAdmin(user)) {
+                                          items.add(
+                                            const PopupMenuItem<String>(
+                                              value: 'delete',
+                                              child: Text('Delete user'),
+                                            ),
+                                          );
+                                        }
+
+                                        return items;
+                                      },
                                     ),
                                 ],
                               ),

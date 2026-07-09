@@ -14,7 +14,7 @@ import '../pages/recipient/recipient_browse_community_hubs_page.dart';
 import '../pages/recipient/recipient_request_status_page.dart';
 import '../pages/admin/admin_user_crud_page.dart';
 import '../pages/admin/admin_review_flagged_listings_page.dart';
-import '../shared_profile_page.dart';
+import '../features/profile/shared_profile_page.dart';
 import '../widgets/app_shell_scaffold.dart';
 import '../widgets/state_widgets.dart';
 import 'user_role.dart';
@@ -34,6 +34,8 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   late int _selectedIndex;
 
   @override
@@ -42,22 +44,98 @@ class _AppShellState extends State<AppShell> {
     _selectedIndex = widget.initialIndex;
   }
 
+  bool _isInactiveStatus(String status) {
+    return status.trim().toLowerCase() == 'inactive';
+  }
+
+  void _showInactiveAccessMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Your account is inactive. Complete the required profile fields to reactivate it.',
+        ),
+      ),
+    );
+  }
+
+  void _handleTabTap({
+    required int index,
+    required int profileIndex,
+    required bool isInactive,
+  }) {
+    if (isInactive && index != profileIndex) {
+      _showInactiveAccessMessage();
+      setState(() {
+        _selectedIndex = profileIndex;
+      });
+      return;
+    }
+
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final uid = _auth.currentUser?.uid;
     final tabs = _tabsForRole(widget.role);
-    final safeIndex = _selectedIndex.clamp(0, tabs.length - 1);
+    final profileIndex = tabs.length - 1;
 
-    return AppShellScaffold(
-      title: tabs[safeIndex].title,
-      subtitle: widget.role.description,
-      currentIndex: safeIndex,
-      destinations: [
-        for (final tab in tabs)
-          ShellDestinationData(icon: tab.icon, label: tab.label),
-      ],
-      onTap: (index) => setState(() => _selectedIndex = index),
-      role: widget.role,
-      child: tabs[safeIndex].builder(context),
+    if (uid == null) {
+      final safeIndex = _selectedIndex.clamp(0, tabs.length - 1);
+      return AppShellScaffold(
+        title: tabs[safeIndex].title,
+        subtitle: widget.role.description,
+        currentIndex: safeIndex,
+        destinations: [
+          for (final tab in tabs)
+            ShellDestinationData(icon: tab.icon, label: tab.label),
+        ],
+        onTap: (index) => setState(() => _selectedIndex = index),
+        role: widget.role,
+        child: tabs[safeIndex].builder(context),
+      );
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _firestore.collection('USER').doc(uid).snapshots(),
+      builder: (context, snapshot) {
+        final status =
+            snapshot.data?.data()?['status']?.toString().trim().toLowerCase() ??
+                'active';
+        final isInactive = _isInactiveStatus(status);
+        final safeIndex = (isInactive ? profileIndex : _selectedIndex)
+            .clamp(0, tabs.length - 1);
+
+        if (isInactive && _selectedIndex != profileIndex) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _selectedIndex = profileIndex;
+            });
+          });
+        }
+
+        return AppShellScaffold(
+          title: tabs[safeIndex].title,
+          subtitle: widget.role.description,
+          currentIndex: safeIndex,
+          destinations: [
+            for (final tab in tabs)
+              ShellDestinationData(icon: tab.icon, label: tab.label),
+          ],
+          onTap: (index) => _handleTabTap(
+            index: index,
+            profileIndex: profileIndex,
+            isInactive: isInactive,
+          ),
+          role: widget.role,
+          child: tabs[safeIndex].builder(context),
+        );
+      },
     );
   }
 }

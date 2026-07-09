@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../auth_wrapper.dart';
-import '../login_page.dart';
+import '../features/auth/auth_wrapper.dart';
+import '../features/auth/login_page.dart';
 import 'app_routes.dart';
 import 'app_shell.dart';
 import 'user_role.dart';

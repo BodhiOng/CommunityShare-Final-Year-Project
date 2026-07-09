@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'app/user_role.dart';
-import 'constants.dart';
+import '../../app/user_role.dart';
+import '../../constants.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key, this.role});

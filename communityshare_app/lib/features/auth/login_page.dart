@@ -1,12 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import 'app/app_routes.dart';
-import 'app/app_router.dart';
-import 'app/user_role.dart';
-import 'app/user_role_resolver.dart';
-import 'constants.dart';
-import 'widgets/app_forms.dart';
+import '../../app/app_routes.dart';
+import '../../app/app_router.dart';
+import '../../app/user_role.dart';
+import '../../app/user_role_resolver.dart';
+import '../../constants.dart';
+import '../../widgets/app_forms.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});

@@ -44,45 +44,45 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyCaHUU2QVcaPG9hn0TLar6_sxS9160ruuU',
     appId: '1:818439486670:web:998e098e2bc221740be49f',
     messagingSenderId: '818439486670',
-    projectId: 'secondhand-marketplace-app',
-    authDomain: 'secondhand-marketplace-app.firebaseapp.com',
-    storageBucket: 'secondhand-marketplace-app.firebasestorage.app',
+    projectId: 'communityshare-bf874',
+    authDomain: 'communityshare-bf874.firebaseapp.com',
+    storageBucket: 'communityshare-bf874.firebasestorage.app',
     measurementId: 'G-ENKLHJLKNY',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDQIUvAjQyxHtm3_l1pHHSIpXOWU3lYd68',
-    appId: '1:818439486670:android:d4583d5cc01329980be49f',
-    messagingSenderId: '818439486670',
-    projectId: 'secondhand-marketplace-app',
-    storageBucket: 'secondhand-marketplace-app.firebasestorage.app',
+    apiKey: 'AIzaSyDAwPvzKI5dx32wp1jnoZmBjzccxKNgEvs',
+    appId: '1:750092666085:android:1a33afe6a6819d4690800c',
+    messagingSenderId: '750092666085',
+    projectId: 'communityshare-bf874',
+    storageBucket: 'communityshare-bf874.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyC0OacfF_Jg3kiUzigUMrc8STKy4cvot-I',
     appId: '1:818439486670:ios:2de7d381918ddfed0be49f',
     messagingSenderId: '818439486670',
-    projectId: 'secondhand-marketplace-app',
-    storageBucket: 'secondhand-marketplace-app.firebasestorage.app',
-    iosBundleId: 'com.example.secondhandMarketplaceApp',
+    projectId: 'communityshare-bf874',
+    storageBucket: 'communityshare-bf874.firebasestorage.app',
+    iosBundleId: 'com.example.communityShareApp',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyC0OacfF_Jg3kiUzigUMrc8STKy4cvot-I',
     appId: '1:818439486670:ios:2de7d381918ddfed0be49f',
     messagingSenderId: '818439486670',
-    projectId: 'secondhand-marketplace-app',
-    storageBucket: 'secondhand-marketplace-app.firebasestorage.app',
-    iosBundleId: 'com.example.secondhandMarketplaceApp',
+    projectId: 'communityshare-bf874',
+    storageBucket: 'communityshare-bf874.firebasestorage.app',
+    iosBundleId: 'com.example.communityShareApp',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
     apiKey: 'AIzaSyCaHUU2QVcaPG9hn0TLar6_sxS9160ruuU',
     appId: '1:818439486670:web:1b8f90e74e75b69e0be49f',
     messagingSenderId: '818439486670',
-    projectId: 'secondhand-marketplace-app',
-    authDomain: 'secondhand-marketplace-app.firebaseapp.com',
-    storageBucket: 'secondhand-marketplace-app.firebasestorage.app',
+    projectId: 'communityshare-bf874',
+    authDomain: 'communityshare-bf874.firebaseapp.com',
+    storageBucket: 'communityshare-bf874.firebasestorage.app',
     measurementId: 'G-LJMP8EVBVV',
   );
 }

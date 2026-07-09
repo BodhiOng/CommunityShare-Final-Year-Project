@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../constants.dart';
-import '../../utils/image_converter.dart';
+import '../../services/image_storage_service.dart';
 import '../../utils/image_utils.dart';
 
 final Random _idRandom = Random.secure();
@@ -912,6 +912,7 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
   final _picker = ImagePicker();
   final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
+  final _imageStorageService = ImageStorageService();
 
   final List<String> _conditions = const [
     'New',
@@ -1047,14 +1048,8 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
         return;
       }
 
-      final encoded = await ImageConverter.fileToBase64(File(picked.path));
-      if (!mounted) {
-        return;
-      }
-
       setState(() {
         _imageFile = File(picked.path);
-        _photoUrl = encoded;
       });
     } catch (error) {
       setState(() {
@@ -1105,6 +1100,15 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
       final itemId = widget.item?.itemId ?? _newThirteenDigitId('item');
       final expiryDate =
           _selectedCategoryId == 'consumables' ? _expiryDate : null;
+      var photoUrl = _photoUrl;
+
+      if (_imageFile != null) {
+        photoUrl = await _imageStorageService.uploadFile(
+          file: _imageFile!,
+          folder: 'listing_images/$donorId',
+          fileName: '${docId}_${DateTime.now().millisecondsSinceEpoch}',
+        );
+      }
 
       final payload = <String, dynamic>{
         'availabilityStatus': _selectedAvailabilityStatus,
@@ -1117,7 +1121,7 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
         'donorId': donorId,
         'expiryDate': expiryDate == null ? null : Timestamp.fromDate(expiryDate),
         'itemId': itemId,
-        'photoUrl': _photoUrl,
+        'photoUrl': photoUrl,
         'quantity': int.parse(_quantityController.text.trim()),
         'title': _titleController.text.trim(),
       };

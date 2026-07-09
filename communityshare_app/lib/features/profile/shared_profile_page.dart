@@ -10,12 +10,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
-import 'app/user_role.dart';
-import 'constants.dart';
-import 'widgets/app_forms.dart';
-import 'widgets/state_widgets.dart';
-import 'utils/image_converter.dart';
-import 'utils/image_utils.dart';
+import '../../app/user_role.dart';
+import '../../constants.dart';
+import '../../services/image_storage_service.dart';
+import '../../widgets/app_forms.dart';
+import '../../widgets/state_widgets.dart';
+import '../../utils/image_converter.dart';
+import '../../utils/image_utils.dart';
 
 class SharedProfilePage extends StatefulWidget {
   const SharedProfilePage({
@@ -35,6 +36,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final HttpClient _httpClient = HttpClient();
+  final ImageStorageService _imageStorageService = ImageStorageService();
 
   final GlobalKey<FormState> _profileFormKey = GlobalKey<FormState>();
 
@@ -621,7 +623,16 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     }
 
     try {
-      return ImageConverter.fileToBase64(_profileImageFile!);
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) {
+        return null;
+      }
+
+      return _imageStorageService.uploadFile(
+        file: _profileImageFile!,
+        folder: 'profile_images/$userId',
+        fileName: 'profile_${DateTime.now().millisecondsSinceEpoch}',
+      );
     } catch (_) {
       return null;
     }
@@ -647,6 +658,9 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         _profileImageUrl = newImageUrl;
       }
 
+      final wasInactive = _status.toLowerCase() == 'inactive';
+      final nextStatus = wasInactive ? 'active' : _status;
+
       if (_fullNameController.text.trim().isNotEmpty &&
           _fullNameController.text.trim() != (user.displayName ?? '')) {
         await user.updateDisplayName(_fullNameController.text.trim());
@@ -665,7 +679,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         'state': _selectedState,
         'country': _selectedCountry,
         'role': widget.role.key,
-        'status': _status,
+        'status': nextStatus,
         'profileImageUrl': _profileImageUrl,
         'createdAt': _createdAt == null
             ? FieldValue.serverTimestamp()
@@ -690,7 +704,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         'state': _selectedState,
         'country': _selectedCountry,
         'role': widget.role.key,
-        'status': _status,
+        'status': nextStatus,
         'profileImageUrl': _profileImageUrl,
       }, SetOptions(merge: true));
 
@@ -699,12 +713,17 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       }
 
       setState(() {
+        _status = nextStatus;
         _isSavingProfile = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Profile updated.'),
+          content: Text(
+            wasInactive
+                ? 'Profile updated. Your account is now active.'
+                : 'Profile updated.',
+          ),
         ),
       );
     } on FirebaseAuthException catch (error) {
@@ -782,6 +801,33 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
           roleLabel: widget.role.label,
           status: _status,
         ),
+        if (_status.toLowerCase() == 'inactive') ...[
+          const SizedBox(height: AppSpacing.md),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    color: AppColors.sun,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'Your account is inactive. Fill in the required profile fields and save to reactivate your account.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.mist,
+                            height: 1.5,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: AppSpacing.lg),
         Card(
           child: Padding(
@@ -846,7 +892,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                   const SizedBox(height: AppSpacing.md),
                   AppTextField(
                     controller: _fullNameController,
-                    label: 'Full Name',
+                    label: 'Full Name *',
                     prefixIcon: const Icon(Icons.badge_outlined),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
@@ -874,7 +920,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                         _SearchableFormField(
                           width: 88,
                           controller: _phoneCountryCodeController,
-                          label: 'Code',
+                          label: 'Code *',
                           hint: '+65',
                           options: phoneCodes,
                           enabled: phoneCodes.isNotEmpty,
@@ -901,7 +947,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                         Expanded(
                           child: AppTextField(
                             controller: _phoneController,
-                            label: 'Phone Number',
+                            label: 'Phone Number *',
                             keyboardType: TextInputType.phone,
                             prefixIcon: const Icon(Icons.phone_outlined),
                             validator: (value) {
@@ -921,7 +967,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                     const SizedBox(height: AppSpacing.lg),
                     _SearchableFormField(
                       controller: _countryController,
-                      label: 'Country',
+                      label: 'Country *',
                       hint: 'Type to search',
                       options: countries.map((option) => option.country).toList(growable: false),
                       prefixIcon: const Icon(Icons.public_outlined),
@@ -947,7 +993,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                     const SizedBox(height: AppSpacing.md),
                     _SearchableFormField(
                       controller: _stateController,
-                      label: 'State',
+                      label: 'State *',
                       hint: _selectedCountry.isEmpty
                           ? 'Select a country first'
                           : 'Type to search',
@@ -973,7 +1019,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                     const SizedBox(height: AppSpacing.md),
                     _SearchableFormField(
                       controller: _cityController,
-                      label: 'City',
+                      label: 'City *',
                       hint: _selectedState.isEmpty
                           ? 'Select a state first'
                           : 'Type to search',
