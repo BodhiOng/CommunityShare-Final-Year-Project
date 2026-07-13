@@ -63,19 +63,16 @@ class _LoginPageState extends State<LoginPage> {
       final role = await UserRoleResolver.resolve(user);
 
       if (!mounted) return;
-      final route = role == UserRole.donor
-          ? AppRoutes.shell
-          : AppRoutes.shell;
-      final arguments = role == UserRole.donor
-          ? const AppShellArguments(role: UserRole.donor, initialIndex: 0)
-          : AppShellArguments(role: role, initialIndex: 0);
+      final route = role == UserRole.donor ? AppRoutes.shell : AppRoutes.shell;
+      final arguments =
+          role == UserRole.donor
+              ? const AppShellArguments(role: UserRole.donor, initialIndex: 0)
+              : AppShellArguments(role: role, initialIndex: 0);
 
       if (!mounted) return;
-      await Navigator.of(context).pushNamedAndRemoveUntil(
-        route,
-        (route) => false,
-        arguments: arguments,
-      );
+      await Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil(route, (route) => false, arguments: arguments);
     } on FirebaseAuthException catch (error) {
       _updateState(() => _errorMessage = _getErrorMessage(error.code));
     } catch (error) {
@@ -138,7 +135,9 @@ class _LoginPageState extends State<LoginPage> {
                               padding: const EdgeInsets.all(AppSpacing.sm),
                               decoration: BoxDecoration(
                                 color: AppColors.mint.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(AppRadius.md),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.md,
+                                ),
                               ),
                               child: Image.asset('assets/logo.png'),
                             ),
@@ -156,20 +155,26 @@ class _LoginPageState extends State<LoginPage> {
                           const Text(
                             AppCopy.tagline,
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: AppColors.mist, height: 1.5),
+                            style: TextStyle(
+                              color: AppColors.mist,
+                              height: 1.5,
+                            ),
                           ),
                           const SizedBox(height: AppSpacing.xl),
                           AppTextField(
                             controller: _emailController,
                             label: 'Email',
                             keyboardType: TextInputType.emailAddress,
-                            prefixIcon: const Icon(Icons.alternate_email_rounded),
+                            prefixIcon: const Icon(
+                              Icons.alternate_email_rounded,
+                            ),
                             validator: (value) {
                               if (value == null || value.trim().isEmpty) {
                                 return 'Enter your email.';
                               }
-                              if (!RegExp(r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$')
-                                  .hasMatch(value.trim())) {
+                              if (!RegExp(
+                                r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$',
+                              ).hasMatch(value.trim())) {
                                 return 'Enter a valid email address.';
                               }
                               return null;
@@ -206,9 +211,13 @@ class _LoginPageState extends State<LoginPage> {
                               padding: const EdgeInsets.all(AppSpacing.md),
                               decoration: BoxDecoration(
                                 color: AppColors.coral.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(AppRadius.sm),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.sm,
+                                ),
                                 border: Border.all(
-                                  color: AppColors.coral.withValues(alpha: 0.35),
+                                  color: AppColors.coral.withValues(
+                                    alpha: 0.35,
+                                  ),
                                 ),
                               ),
                               child: Text(
@@ -226,10 +235,28 @@ class _LoginPageState extends State<LoginPage> {
                             icon: const Icon(Icons.login_rounded),
                           ),
                           const SizedBox(height: AppSpacing.md),
-                          const Text(
-                            'Sign up and recovery flows can be wired onto this shell next.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: AppColors.mist),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              TextButton(
+                                onPressed:
+                                    _isLoading
+                                        ? null
+                                        : () => Navigator.of(
+                                          context,
+                                        ).pushNamed(AppRoutes.forgotPassword),
+                                child: const Text('Forgot password?'),
+                              ),
+                              TextButton(
+                                onPressed:
+                                    _isLoading
+                                        ? null
+                                        : () => Navigator.of(
+                                          context,
+                                        ).pushNamed(AppRoutes.register),
+                                child: const Text('Create account'),
+                              ),
+                            ],
                           ),
                         ],
                       ),

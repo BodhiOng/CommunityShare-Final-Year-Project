@@ -12,6 +12,10 @@ class ItemListing {
     required this.photoUrl,
     required this.expiryDate,
     required this.availabilityStatus,
+    required this.allowsIndependentPickup,
+    required this.allowsCommunityHubPickup,
+    required this.hubId,
+    required this.hubName,
     required this.createdAt,
   });
 
@@ -25,15 +29,22 @@ class ItemListing {
   final String photoUrl;
   final DateTime? expiryDate;
   final String availabilityStatus;
+  final bool allowsIndependentPickup;
+  final bool allowsCommunityHubPickup;
+  final String hubId;
+  final String hubName;
   final DateTime? createdAt;
 
-  factory ItemListing.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory ItemListing.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data() ?? <String, dynamic>{};
 
     return ItemListing(
-      itemId: _readString(data['itemId']).isNotEmpty
-          ? _readString(data['itemId'])
-          : doc.id,
+      itemId:
+          _readString(data['itemId']).isNotEmpty
+              ? _readString(data['itemId'])
+              : doc.id,
       donorId: _readString(data['donorId']),
       category: _readString(data['category'], fallback: 'Uncategorized'),
       title: _readString(data['title'], fallback: 'Untitled item'),
@@ -49,6 +60,18 @@ class ItemListing {
         data['availabilityStatus'],
         fallback: 'unknown',
       ),
+      allowsIndependentPickup: _readBool(
+        data['allowsIndependentPickup'],
+        fallback:
+            !_readBool(data['allowsCommunityHubPickup']) ||
+            _readString(data['hubId']).isEmpty,
+      ),
+      allowsCommunityHubPickup: _readBool(
+        data['allowsCommunityHubPickup'],
+        fallback: _readString(data['hubId']).isNotEmpty,
+      ),
+      hubId: _readString(data['hubId']),
+      hubName: _readString(data['hubName']),
       createdAt: _readDateTime(data['createdAt']),
     );
   }
@@ -74,6 +97,10 @@ class ItemListing {
         !isExpired;
   }
 
+  bool get hasAnyHandoverMethod {
+    return allowsIndependentPickup || allowsCommunityHubPickup;
+  }
+
   static String _readString(dynamic value, {String fallback = ''}) {
     if (value is String) {
       final trimmed = value.trim();
@@ -93,6 +120,25 @@ class ItemListing {
       return int.tryParse(value) ?? 0;
     }
     return 0;
+  }
+
+  static bool _readBool(dynamic value, {bool fallback = false}) {
+    if (value is bool) {
+      return value;
+    }
+    if (value is num) {
+      return value != 0;
+    }
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      if (normalized == 'true' || normalized == '1') {
+        return true;
+      }
+      if (normalized == 'false' || normalized == '0') {
+        return false;
+      }
+    }
+    return fallback;
   }
 
   static DateTime? _readDateTime(dynamic value) {

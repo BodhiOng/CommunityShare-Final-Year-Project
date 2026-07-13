@@ -54,19 +54,17 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
         throw Exception('User not authenticated');
       }
 
-      final listingSnapshot = await _firestore
-          .collection('ITEM_LISTING')
-          .where('donorId', isEqualTo: donorId)
-          .get();
+      final listingSnapshot =
+          await _firestore
+              .collection('ITEM_LISTING')
+              .where('donorId', isEqualTo: donorId)
+              .get();
 
       final listingsByItemId = <String, Map<String, dynamic>>{
         for (final doc in listingSnapshot.docs)
           (doc.data()['itemId']?.toString().trim().isNotEmpty ?? false)
               ? doc.data()['itemId'].toString().trim()
-              : doc.id: {
-            ...doc.data(),
-            '_docId': doc.id,
-          },
+              : doc.id: {...doc.data(), '_docId': doc.id},
       };
 
       if (listingsByItemId.isEmpty) {
@@ -83,10 +81,11 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
       final requestDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
       final itemIds = listingsByItemId.keys.toList(growable: false);
       for (final chunk in _chunkStrings(itemIds, 10)) {
-        final snapshot = await _firestore
-            .collection('ITEM_REQUEST')
-            .where('itemId', whereIn: chunk)
-            .get();
+        final snapshot =
+            await _firestore
+                .collection('ITEM_REQUEST')
+                .where('itemId', whereIn: chunk)
+                .get();
         requestDocs.addAll(snapshot.docs);
       }
 
@@ -104,46 +103,56 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
       final usersById = await _loadUsersByIds(recipientIds);
       final hubsById = await _loadUsersByIds(hubIds);
 
-      final requests = requestDocs.map((doc) {
-        final data = doc.data();
-        final itemId = data['itemId']?.toString().trim() ?? '';
-        final itemData = listingsByItemId[itemId] ?? const <String, dynamic>{};
-        final recipientId = data['recipientId']?.toString().trim() ?? '';
-        final hubId = data['hubId']?.toString().trim() ?? '';
+      final requests = requestDocs
+        .map((doc) {
+          final data = doc.data();
+          final itemId = data['itemId']?.toString().trim() ?? '';
+          final itemData =
+              listingsByItemId[itemId] ?? const <String, dynamic>{};
+          final recipientId = data['recipientId']?.toString().trim() ?? '';
+          final hubId = data['hubId']?.toString().trim() ?? '';
 
-        return DonorIncomingRequestRecord(
-          requestId: data['requestId']?.toString().trim().isNotEmpty == true
-              ? data['requestId'].toString().trim()
-              : doc.id,
-          docId: doc.id,
-          itemId: itemId,
-          itemDocId: itemData['_docId']?.toString() ?? '',
-          itemTitle: itemData['title']?.toString().trim().isNotEmpty == true
-              ? itemData['title'].toString().trim()
-              : 'Community item',
-          itemPhotoUrl: itemData['photoUrl']?.toString().trim() ?? '',
-          itemCategory: itemData['category']?.toString().trim() ?? 'others',
-          itemQuantity: _readInt(itemData['quantity']),
-          availabilityStatus:
-              itemData['availabilityStatus']?.toString().trim() ?? 'available',
-          recipientId: recipientId,
-          recipientName: _displayNameForUser(usersById[recipientId]),
-          recipientPhone: _phoneForUser(usersById[recipientId]),
-          recipientLocation: _locationForUser(usersById[recipientId]),
-          hubId: hubId,
-          hubName: _displayNameForHub(hubsById[hubId], hubId),
-          requestNote: data['requestNote']?.toString().trim() ?? '',
-          requestStatus: data['requestStatus']?.toString().trim() ?? 'pending',
-          handoverStatus: '',
-          requestedAt: _readDateTime(data['requestedAt']),
-          updatedAt: _readDateTime(data['updatedAt']),
-        );
-      }).toList(growable: false)
-        ..sort((a, b) {
-          final left = a.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final right = b.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-          return right.compareTo(left);
-        });
+          return DonorIncomingRequestRecord(
+            requestId:
+                data['requestId']?.toString().trim().isNotEmpty == true
+                    ? data['requestId'].toString().trim()
+                    : doc.id,
+            docId: doc.id,
+            itemId: itemId,
+            itemDocId: itemData['_docId']?.toString() ?? '',
+            itemTitle:
+                itemData['title']?.toString().trim().isNotEmpty == true
+                    ? itemData['title'].toString().trim()
+                    : 'Community item',
+            itemPhotoUrl: itemData['photoUrl']?.toString().trim() ?? '',
+            itemCategory: itemData['category']?.toString().trim() ?? 'others',
+            itemQuantity: _readInt(itemData['quantity']),
+            availabilityStatus:
+                itemData['availabilityStatus']?.toString().trim() ??
+                'available',
+            recipientId: recipientId,
+            recipientName: _displayNameForUser(usersById[recipientId]),
+            recipientPhone: _phoneForUser(usersById[recipientId]),
+            recipientLocation: _locationForUser(usersById[recipientId]),
+            handoverType: data['handoverType']?.toString().trim() ?? '',
+            hubId: hubId,
+            hubName:
+                data['hubName']?.toString().trim().isNotEmpty == true
+                    ? data['hubName'].toString().trim()
+                    : _displayNameForHub(hubsById[hubId], hubId),
+            requestNote: data['requestNote']?.toString().trim() ?? '',
+            requestStatus:
+                data['requestStatus']?.toString().trim() ?? 'pending',
+            handoverStatus: '',
+            requestedAt: _readDateTime(data['requestedAt']),
+            updatedAt: _readDateTime(data['updatedAt']),
+          );
+        })
+        .toList(growable: false)..sort((a, b) {
+        final left = a.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final right = b.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return right.compareTo(left);
+      });
 
       if (!mounted) {
         return;
@@ -173,10 +182,7 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
     for (final id in ids) {
       final usersDoc = await _firestore.collection('USER').doc(id).get();
       final userDoc = await _firestore.collection('USER').doc(id).get();
-      result[id] = {
-        ...?usersDoc.data(),
-        ...?userDoc.data(),
-      };
+      result[id] = {...?usersDoc.data(), ...?userDoc.data()};
     }
     return result;
   }
@@ -197,17 +203,19 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
       return requests;
     }
 
-    return requests.where((request) {
-      return request.itemTitle.toLowerCase().contains(normalizedQuery) ||
-          request.recipientName.toLowerCase().contains(normalizedQuery) ||
-          request.requestNote.toLowerCase().contains(normalizedQuery) ||
-          request.requestStatus.toLowerCase().contains(normalizedQuery) ||
-          request.itemCategory.toLowerCase().contains(normalizedQuery) ||
-          request.hubName.toLowerCase().contains(normalizedQuery) ||
-          request.itemId.toLowerCase().contains(normalizedQuery) ||
-          request.recipientId.toLowerCase().contains(normalizedQuery) ||
-          request.hubId.toLowerCase().contains(normalizedQuery);
-    }).toList(growable: false);
+    return requests
+        .where((request) {
+          return request.itemTitle.toLowerCase().contains(normalizedQuery) ||
+              request.recipientName.toLowerCase().contains(normalizedQuery) ||
+              request.requestNote.toLowerCase().contains(normalizedQuery) ||
+              request.requestStatus.toLowerCase().contains(normalizedQuery) ||
+              request.itemCategory.toLowerCase().contains(normalizedQuery) ||
+              request.hubName.toLowerCase().contains(normalizedQuery) ||
+              request.itemId.toLowerCase().contains(normalizedQuery) ||
+              request.recipientId.toLowerCase().contains(normalizedQuery) ||
+              request.hubId.toLowerCase().contains(normalizedQuery);
+        })
+        .toList(growable: false);
   }
 
   int get _totalPages {
@@ -240,10 +248,7 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
     }
 
     if (_errorMessage.isNotEmpty) {
-      return AppErrorState(
-        message: _errorMessage,
-        onRetry: _loadRequests,
-      );
+      return AppErrorState(message: _errorMessage, onRetry: _loadRequests);
     }
 
     if (_requests.isEmpty) {
@@ -266,12 +271,13 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
               controller: _searchController,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () => _searchController.clear(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
+                suffixIcon:
+                    _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                          onPressed: () => _searchController.clear(),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
                 hintText: 'Search incoming requests',
               ),
             ),
@@ -296,12 +302,13 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
             controller: _searchController,
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: _searchController.text.isEmpty
-                  ? null
-                  : IconButton(
-                      onPressed: () => _searchController.clear(),
-                      icon: const Icon(Icons.close_rounded),
-                    ),
+              suffixIcon:
+                  _searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                        onPressed: () => _searchController.clear(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
               hintText: 'Search incoming requests',
             ),
           ),
@@ -332,13 +339,14 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
                           child: SizedBox(
                             width: 68,
                             height: 68,
-                            child: request.itemPhotoUrl.isNotEmpty
-                                ? ImageUtils.base64ToImage(
-                                    request.itemPhotoUrl,
-                                    fit: BoxFit.cover,
-                                    errorWidget: itemImageFallback(),
-                                  )
-                                : itemImageFallback(),
+                            child:
+                                request.itemPhotoUrl.isNotEmpty
+                                    ? ImageUtils.base64ToImage(
+                                      request.itemPhotoUrl,
+                                      fit: BoxFit.cover,
+                                      errorWidget: itemImageFallback(),
+                                    )
+                                    : itemImageFallback(),
                           ),
                         ),
                         const SizedBox(width: AppSpacing.md),
@@ -350,9 +358,7 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
                                 request.itemTitle,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
+                                style: Theme.of(context).textTheme.titleMedium
                                     ?.copyWith(fontWeight: FontWeight.w700),
                               ),
                               const SizedBox(height: AppSpacing.xs),
@@ -374,8 +380,12 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
                                 runSpacing: AppSpacing.xs,
                                 children: [
                                   _RequestChip(
-                                    label: titleCaseLabel(request.requestStatus),
-                                    color: requestStatusColor(request.requestStatus),
+                                    label: titleCaseLabel(
+                                      request.requestStatus,
+                                    ),
+                                    color: requestStatusColor(
+                                      request.requestStatus,
+                                    ),
                                   ),
                                   if (request.hubId.isNotEmpty)
                                     _RequestChip(
@@ -406,9 +416,10 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
               totalPages: _totalPages,
               onPrevious:
                   _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
-              onNext: _currentPage + 1 < _totalPages
-                  ? () => _goToPage(_currentPage + 1)
-                  : null,
+              onNext:
+                  _currentPage + 1 < _totalPages
+                      ? () => _goToPage(_currentPage + 1)
+                      : null,
             ),
           ],
         ],
@@ -477,10 +488,11 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
 
     final phoneCode = data['phoneCountryCode']?.toString().trim() ?? '';
     final localPhone = data['phoneLocalNumber']?.toString().trim() ?? '';
-    final combined = [phoneCode, localPhone]
-        .where((value) => value.isNotEmpty)
-        .join(' ')
-        .trim();
+    final combined =
+        [
+          phoneCode,
+          localPhone,
+        ].where((value) => value.isNotEmpty).join(' ').trim();
     return combined.isNotEmpty ? combined : 'Phone not provided';
   }
 
@@ -498,10 +510,7 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
     return parts.isNotEmpty ? parts.join(', ') : 'Location not provided';
   }
 
-  static String _displayNameForHub(
-    Map<String, dynamic>? data,
-    String hubId,
-  ) {
+  static String _displayNameForHub(Map<String, dynamic>? data, String hubId) {
     if (hubId.isEmpty) {
       return 'No hub selected';
     }
@@ -527,7 +536,6 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
 
     return hubId;
   }
-
 }
 
 class DonorIncomingRequestRecord {
@@ -545,6 +553,7 @@ class DonorIncomingRequestRecord {
     required this.recipientName,
     required this.recipientPhone,
     required this.recipientLocation,
+    required this.handoverType,
     required this.hubId,
     required this.hubName,
     required this.requestNote,
@@ -567,6 +576,7 @@ class DonorIncomingRequestRecord {
   final String recipientName;
   final String recipientPhone;
   final String recipientLocation;
+  final String handoverType;
   final String hubId;
   final String hubName;
   final String requestNote;
@@ -577,10 +587,7 @@ class DonorIncomingRequestRecord {
 }
 
 class _RequestChip extends StatelessWidget {
-  const _RequestChip({
-    required this.label,
-    required this.color,
-  });
+  const _RequestChip({required this.label, required this.color});
 
   final String label;
   final Color color;

@@ -19,6 +19,71 @@ const COLLECTIONS = {
   donationStatusHistory: "DONATION_STATUS_HISTORY",
 };
 
+exports.registerUser = onCall(async (request) => {
+  if (request.auth?.uid) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Sign out before creating a new account.",
+    );
+  }
+
+  const data = request.data || {};
+  const email = requiredString(data.email, "email");
+  const password = requiredString(data.password, "password");
+  const fullName = requiredString(data.fullName, "fullName");
+  const role = normalizePublicRole(data.role);
+  const phoneNumber = optionalString(data.phoneNumber);
+  const recipientType = optionalString(data.recipientType);
+  const hubDetails = normalizeHubDetails(data.hubDetails || {}, "active");
+
+  if (password.length < 6) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Password must be at least 6 characters long.",
+    );
+  }
+
+  if (role === "recipient" && !recipientType) {
+    throw new HttpsError(
+      "invalid-argument",
+      "recipientType is required for recipient users.",
+    );
+  }
+
+  if (role === "hub") {
+    validateHubDetails(hubDetails, {requireHubId: false});
+  }
+
+  const createdUser = await auth.createUser({
+    email,
+    password,
+    displayName: fullName,
+    disabled: false,
+  });
+
+  try {
+    await createUserDocuments({
+      userId: createdUser.uid,
+      fullName,
+      email,
+      phoneNumber,
+      role,
+      status: "active",
+      recipientType,
+      hubDetails,
+    });
+  } catch (error) {
+    await auth.deleteUser(createdUser.uid).catch(() => {});
+    throw error;
+  }
+
+  return {
+    userId: createdUser.uid,
+    role,
+    status: "active",
+  };
+});
+
 exports.createManagedUser = onCall(async (request) => {
   const callerUid = await assertAdminCaller(request);
   void callerUid;
@@ -52,35 +117,15 @@ exports.createManagedUser = onCall(async (request) => {
   });
 
   try {
-    await db.runTransaction(async (transaction) => {
-      const userRef = db.collection(COLLECTIONS.user).doc(createdUser.uid);
-      const existingUser = await transaction.get(userRef);
-      if (existingUser.exists) {
-        throw new HttpsError(
-          "already-exists",
-          "A USER record already exists for this auth user.",
-        );
-      }
-
-      transaction.set(userRef, {
-        userId: createdUser.uid,
-        fullName,
-        email,
-        passwordHash: "",
-        phoneNumber,
-        role,
-        status,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      writeRoleDocument({
-        transaction,
-        userId: createdUser.uid,
-        role,
-        status,
-        recipientType,
-        hubDetails,
-      });
+    await createUserDocuments({
+      userId: createdUser.uid,
+      fullName,
+      email,
+      phoneNumber,
+      role,
+      status,
+      recipientType,
+      hubDetails,
     });
   } catch (error) {
     await auth.deleteUser(createdUser.uid).catch(() => {});
@@ -89,6 +134,48 @@ exports.createManagedUser = onCall(async (request) => {
 
   return {userId: createdUser.uid};
 });
+
+async function createUserDocuments({
+  userId,
+  fullName,
+  email,
+  phoneNumber,
+  role,
+  status,
+  recipientType,
+  hubDetails,
+}) {
+  await db.runTransaction(async (transaction) => {
+    const userRef = db.collection(COLLECTIONS.user).doc(userId);
+    const existingUser = await transaction.get(userRef);
+    if (existingUser.exists) {
+      throw new HttpsError(
+        "already-exists",
+        "A USER record already exists for this auth user.",
+      );
+    }
+
+    transaction.set(userRef, {
+      userId,
+      fullName,
+      email,
+      passwordHash: "",
+      phoneNumber,
+      role,
+      status,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    writeRoleDocument({
+      transaction,
+      userId,
+      role,
+      status,
+      recipientType,
+      hubDetails,
+    });
+  });
+}
 
 exports.deleteManagedUser = onCall(async (request) => {
   const callerUid = await assertAdminCaller(request);
@@ -422,6 +509,14 @@ function normalizeRole(value) {
   return role;
 }
 
+function normalizePublicRole(value) {
+  const role = optionalString(value).toLowerCase();
+  if (!["donor", "recipient", "hub"].includes(role)) {
+    throw new HttpsError("invalid-argument", `Invalid role: ${value}`);
+  }
+  return role;
+}
+
 function normalizeStatus(value) {
   const status = optionalString(value).toLowerCase();
   if (!["active", "inactive", "suspended", "deleted"].includes(status)) {
@@ -441,8 +536,9 @@ function normalizeHubDetails(value, status) {
   };
 }
 
-function validateHubDetails(hubDetails) {
-  if (!hubDetails.hubId) {
+function validateHubDetails(hubDetails, options = {}) {
+  const requireHubId = options.requireHubId !== false;
+  if (requireHubId && !hubDetails.hubId) {
     throw new HttpsError("invalid-argument", "hubId is required for hub users.");
   }
   if (!hubDetails.hubName) {

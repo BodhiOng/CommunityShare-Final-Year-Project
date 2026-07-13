@@ -4,15 +4,22 @@ import 'package:flutter/material.dart';
 import '../../constants.dart';
 import '../../widgets/state_widgets.dart';
 
+const String _hoursUnavailableValue = '__hours_unavailable__';
+const String _morningHoursValue = 'morning';
+const String _noonHoursValue = 'noon';
+const String _afternoonHoursValue = 'afternoon';
+
 class RecipientBrowseCommunityHubsPage extends StatefulWidget {
   const RecipientBrowseCommunityHubsPage({
     super.key,
     this.selectedHubId,
     this.selectionEnabled = false,
+    this.standaloneTitle,
   });
 
   final String? selectedHubId;
   final bool selectionEnabled;
+  final String? standaloneTitle;
 
   @override
   State<RecipientBrowseCommunityHubsPage> createState() =>
@@ -22,10 +29,13 @@ class RecipientBrowseCommunityHubsPage extends StatefulWidget {
 class _RecipientBrowseCommunityHubsPageState
     extends State<RecipientBrowseCommunityHubsPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final TextEditingController _searchController = TextEditingController();
 
   bool _isLoading = true;
   String _errorMessage = '';
   List<CommunityHubBrowseRecord> _hubs = const [];
+  String _selectedCountry = 'all';
+  String _selectedHours = 'all';
   int _currentPage = 0;
 
   static const int _hubsPerPage = 8;
@@ -33,7 +43,15 @@ class _RecipientBrowseCommunityHubsPageState
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(_handleFiltersChanged);
     _loadHubs();
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_handleFiltersChanged);
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadHubs() async {
@@ -65,6 +83,12 @@ class _RecipientBrowseCommunityHubsPageState
 
       setState(() {
         _hubs = hubs;
+        if (!_availableCountries.contains(_selectedCountry)) {
+          _selectedCountry = 'all';
+        }
+        if (!_availableHours.contains(_selectedHours)) {
+          _selectedHours = 'all';
+        }
         _currentPage = 0;
         _isLoading = false;
       });
@@ -82,7 +106,12 @@ class _RecipientBrowseCommunityHubsPageState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(body: _buildBody());
+    return Scaffold(
+      appBar: widget.standaloneTitle == null
+          ? null
+          : AppBar(title: Text(widget.standaloneTitle!)),
+      body: _buildBody(),
+    );
   }
 
   Widget _buildBody() {
@@ -105,24 +134,39 @@ class _RecipientBrowseCommunityHubsPageState
       );
     }
 
+    final filteredHubs = _filteredHubs;
     final paginatedHubs = _paginatedHubs;
 
     return RefreshIndicator(
       color: AppColors.mint,
       onRefresh: _loadHubs,
       child: ListView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.xl,
+          AppSpacing.lg,
+          AppSpacing.lg,
+        ),
         children: [
-          for (final hub in paginatedHubs) ...[
-            _HubCard(
-              hub: hub,
-              isSelected: hub.hubId == widget.selectedHubId,
-              selectionEnabled: widget.selectionEnabled,
-              onTap: () => _handleHubTap(hub),
-            ),
-            const SizedBox(height: AppSpacing.md),
-          ],
-          if (_hubs.isNotEmpty) ...[
+          _buildSearchAndFilters(),
+          const SizedBox(height: AppSpacing.lg),
+          if (filteredHubs.isEmpty)
+            const AppEmptyState(
+              icon: Icons.search_off_outlined,
+              title: 'No matching community hubs',
+              message: 'Adjust the search, hours, or country filters.',
+            )
+          else
+            for (final hub in paginatedHubs) ...[
+              _HubCard(
+                hub: hub,
+                isSelected: hub.hubId == widget.selectedHubId,
+                selectionEnabled: widget.selectionEnabled,
+                onTap: () => _handleHubTap(hub),
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
+          if (filteredHubs.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.sm),
             _PaginationBar(
               currentPage: _currentPage,
@@ -136,6 +180,112 @@ class _RecipientBrowseCommunityHubsPageState
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildSearchAndFilters() {
+    final hoursFilter = DropdownButtonFormField<String>(
+      initialValue: _selectedHours,
+      decoration: const InputDecoration(
+        labelText: 'Hours',
+      ),
+      items: _availableHours
+          .map(
+            (value) => DropdownMenuItem<String>(
+              value: value,
+              child: Text(
+                value == 'all'
+                    ? 'All hours'
+                    : value == _morningHoursValue
+                    ? 'Morning'
+                    : value == _noonHoursValue
+                    ? 'Noon'
+                    : value == _afternoonHoursValue
+                    ? 'Afternoon'
+                    : 'Hours unavailable',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: (value) {
+        if (value == null) {
+          return;
+        }
+        setState(() {
+          _selectedHours = value;
+          _currentPage = 0;
+        });
+      },
+    );
+
+    final countryFilter = DropdownButtonFormField<String>(
+      initialValue: _selectedCountry,
+      decoration: const InputDecoration(
+        labelText: 'Country',
+      ),
+      items: _availableCountries
+          .map(
+            (value) => DropdownMenuItem<String>(
+              value: value,
+              child: Text(
+                value == 'all' ? 'All countries' : value,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: (value) {
+        if (value == null) {
+          return;
+        }
+        setState(() {
+          _selectedCountry = value;
+          _currentPage = 0;
+        });
+      },
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _searchController,
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            hintText: 'Search by hub, address, contact, or ID',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _searchController.text.isEmpty
+                ? null
+                : IconButton(
+                    onPressed: () => _searchController.clear(),
+                    icon: const Icon(Icons.close),
+                  ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 640) {
+              return Column(
+                children: [
+                  hoursFilter,
+                  const SizedBox(height: AppSpacing.md),
+                  countryFilter,
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                Expanded(child: hoursFilter),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(child: countryFilter),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -233,20 +383,71 @@ class _RecipientBrowseCommunityHubsPageState
     );
   }
 
+  List<CommunityHubBrowseRecord> get _filteredHubs {
+    final query = _searchController.text.trim().toLowerCase();
+    return _hubs.where((hub) {
+      final matchesQuery =
+          query.isEmpty ||
+          hub.hubName.toLowerCase().contains(query) ||
+          hub.hubId.toLowerCase().contains(query) ||
+          hub.address.toLowerCase().contains(query) ||
+          hub.contactNumber.toLowerCase().contains(query) ||
+          hub.country.toLowerCase().contains(query);
+      final matchesCountry =
+          _selectedCountry == 'all' || hub.country == _selectedCountry;
+      final matchesHours =
+          _selectedHours == 'all' ||
+          (_selectedHours == _hoursUnavailableValue
+              ? hub.operatingHours.isEmpty
+              : hub.hoursBucket == _selectedHours);
+      return matchesQuery && matchesCountry && matchesHours;
+    }).toList(growable: false);
+  }
+
+  List<String> get _availableCountries {
+    final countries = _hubs
+        .map((hub) => hub.country)
+        .where((country) => country.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort((left, right) => left.toLowerCase().compareTo(right.toLowerCase()));
+    return ['all', ...countries];
+  }
+
+  List<String> get _availableHours {
+    final buckets = <String>{
+      for (final hub in _hubs)
+        if (hub.operatingHours.isEmpty)
+          _hoursUnavailableValue
+        else
+          hub.hoursBucket,
+    }.toList()
+      ..sort((left, right) {
+        const order = {
+          _morningHoursValue: 0,
+          _noonHoursValue: 1,
+          _afternoonHoursValue: 2,
+          _hoursUnavailableValue: 3,
+        };
+        return (order[left] ?? 99).compareTo(order[right] ?? 99);
+      });
+    return ['all', ...buckets];
+  }
+
   List<CommunityHubBrowseRecord> get _paginatedHubs {
     final start = _currentPage * _hubsPerPage;
-    if (start >= _hubs.length) {
+    if (start >= _filteredHubs.length) {
       return const [];
     }
-    final end = (start + _hubsPerPage).clamp(0, _hubs.length);
-    return _hubs.sublist(start, end);
+    final end = (start + _hubsPerPage).clamp(0, _filteredHubs.length);
+    return _filteredHubs.sublist(start, end);
   }
 
   int get _totalPages {
-    if (_hubs.isEmpty) {
+    if (_filteredHubs.isEmpty) {
       return 1;
     }
-    return (_hubs.length / _hubsPerPage).ceil();
+    return (_filteredHubs.length / _hubsPerPage).ceil();
   }
 
   void _goToPage(int page) {
@@ -254,6 +455,13 @@ class _RecipientBrowseCommunityHubsPageState
       return;
     }
     setState(() => _currentPage = page);
+  }
+
+  void _handleFiltersChanged() {
+    if (!mounted) {
+      return;
+    }
+    setState(() => _currentPage = 0);
   }
 }
 
@@ -273,6 +481,8 @@ class CommunityHubBrowseRecord {
   final String operatingHours;
   final String contactNumber;
   final String status;
+  String get country => _countryFromAddress(address);
+  String get hoursBucket => _hoursBucketFromOperatingHours(operatingHours);
 
   factory CommunityHubBrowseRecord.fromFirestore(
     String docId,
@@ -294,6 +504,49 @@ class CommunityHubBrowseRecord {
       return trimmed.isEmpty ? fallback : trimmed;
     }
     return fallback;
+  }
+
+  static String _countryFromAddress(String address) {
+    final trimmed = address.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+
+    final segments = trimmed
+        .split(',')
+        .map((segment) => segment.trim())
+        .where((segment) => segment.isNotEmpty)
+        .toList(growable: false);
+    if (segments.isEmpty) {
+      return trimmed;
+    }
+    return segments.last;
+  }
+
+  static String _hoursBucketFromOperatingHours(String operatingHours) {
+    final match = RegExp(r'(\d{1,2})(?::(\d{2}))?\s*(AM|PM)', caseSensitive: false)
+        .firstMatch(operatingHours);
+    if (match == null) {
+      return _hoursUnavailableValue;
+    }
+
+    final hour = int.tryParse(match.group(1) ?? '');
+    if (hour == null) {
+      return _hoursUnavailableValue;
+    }
+
+    final period = (match.group(3) ?? '').toUpperCase();
+    final normalizedHour = period == 'AM'
+        ? (hour == 12 ? 0 : hour)
+        : (hour == 12 ? 12 : hour + 12);
+
+    if (normalizedHour < 12) {
+      return _morningHoursValue;
+    }
+    if (normalizedHour < 15) {
+      return _noonHoursValue;
+    }
+    return _afternoonHoursValue;
   }
 }
 

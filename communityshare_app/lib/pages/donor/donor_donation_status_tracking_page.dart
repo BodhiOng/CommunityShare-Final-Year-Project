@@ -7,10 +7,7 @@ import 'donor_incoming_requests_page.dart';
 import '../../widgets/state_widgets.dart';
 
 class DonorDonationStatusTrackingPage extends StatefulWidget {
-  const DonorDonationStatusTrackingPage({
-    super.key,
-    required this.request,
-  });
+  const DonorDonationStatusTrackingPage({super.key, required this.request});
 
   final DonorIncomingRequestRecord request;
 
@@ -40,39 +37,44 @@ class _DonorDonationStatusTrackingPageState
     });
 
     try {
-      final requestDoc = await _firestore
-          .collection('ITEM_REQUEST')
-          .doc(widget.request.docId)
-          .get();
+      final requestDoc =
+          await _firestore
+              .collection('ITEM_REQUEST')
+              .doc(widget.request.docId)
+              .get();
       if (!requestDoc.exists) {
         throw Exception('Request record not found');
       }
 
       final requestData = requestDoc.data() ?? const <String, dynamic>{};
-      final historySnapshot = await _firestore
-          .collection('DONATION_STATUS_HISTORY')
-          .where('requestId', isEqualTo: widget.request.requestId)
-          .orderBy('changedAt')
-          .get();
-      final handoverSnapshot = await _firestore
-          .collection('HANDOVER')
-          .where('requestId', isEqualTo: widget.request.requestId)
-          .limit(1)
-          .get();
+      final historySnapshot =
+          await _firestore
+              .collection('DONATION_STATUS_HISTORY')
+              .where('requestId', isEqualTo: widget.request.requestId)
+              .orderBy('changedAt')
+              .get();
+      final handoverSnapshot =
+          await _firestore
+              .collection('HANDOVER')
+              .where('requestId', isEqualTo: widget.request.requestId)
+              .limit(1)
+              .get();
 
       Map<String, dynamic> itemData = const <String, dynamic>{};
       if (widget.request.itemDocId.isNotEmpty) {
-        final itemDoc = await _firestore
-            .collection('ITEM_LISTING')
-            .doc(widget.request.itemDocId)
-            .get();
+        final itemDoc =
+            await _firestore
+                .collection('ITEM_LISTING')
+                .doc(widget.request.itemDocId)
+                .get();
         itemData = itemDoc.data() ?? const <String, dynamic>{};
       } else {
-        final itemSnapshot = await _firestore
-            .collection('ITEM_LISTING')
-            .where('itemId', isEqualTo: widget.request.itemId)
-            .limit(1)
-            .get();
+        final itemSnapshot =
+            await _firestore
+                .collection('ITEM_LISTING')
+                .where('itemId', isEqualTo: widget.request.itemId)
+                .limit(1)
+                .get();
         if (itemSnapshot.docs.isNotEmpty) {
           itemData = itemSnapshot.docs.first.data();
         }
@@ -84,7 +86,7 @@ class _DonorDonationStatusTrackingPageState
 
       final requestedAt = _readDateTime(requestData['requestedAt']);
       final timeline = historySnapshot.docs
-          .map(
+        .map(
           (doc) => _StatusHistoryEntry(
             status: doc.data()['status']?.toString().trim() ?? 'unknown',
             changedAt: _readDateTime(doc.data()['changedAt']),
@@ -92,12 +94,11 @@ class _DonorDonationStatusTrackingPageState
                 doc.data()['changedByUserId']?.toString().trim() ?? '',
           ),
         )
-          .toList(growable: false)
-        ..sort((a, b) {
-          final left = a.changedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final right = b.changedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-          return left.compareTo(right);
-        });
+        .toList(growable: false)..sort((a, b) {
+        final left = a.changedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final right = b.changedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return left.compareTo(right);
+      });
 
       if (!mounted) {
         return;
@@ -105,24 +106,31 @@ class _DonorDonationStatusTrackingPageState
 
       setState(() {
         _snapshot = _TrackingSnapshot(
-          requestStatus: requestData['requestStatus']?.toString().trim() ??
+          requestStatus:
+              requestData['requestStatus']?.toString().trim() ??
               widget.request.requestStatus,
-          requestNote: requestData['requestNote']?.toString().trim() ??
+          requestNote:
+              requestData['requestNote']?.toString().trim() ??
               widget.request.requestNote,
           requestedAt: requestedAt,
           updatedAt: _readDateTime(requestData['updatedAt']),
           hubId: requestData['hubId']?.toString().trim() ?? '',
-          listingStatus: itemData['availabilityStatus']?.toString().trim() ??
+          listingStatus:
+              itemData['availabilityStatus']?.toString().trim() ??
               widget.request.availabilityStatus,
           itemCategory:
-              itemData['category']?.toString().trim() ?? widget.request.itemCategory,
+              itemData['category']?.toString().trim() ??
+              widget.request.itemCategory,
           itemCondition:
               itemData['condition']?.toString().trim() ?? 'Condition not set',
           itemCreatedAt: _readDateTime(itemData['createdAt']),
           handoverId: handoverData?['handoverId']?.toString().trim() ?? '',
           handoverStatus:
               handoverData?['handoverStatus']?.toString().trim() ?? '',
-          handoverType: handoverData?['handoverType']?.toString().trim() ?? '',
+          handoverType:
+              handoverData?['handoverType']?.toString().trim() ??
+              requestData['handoverType']?.toString().trim() ??
+              widget.request.handoverType,
           completedAt: _readDateTime(handoverData?['completedAt']),
           timeline: timeline,
         );
@@ -158,10 +166,7 @@ class _DonorDonationStatusTrackingPageState
     if (_errorMessage.isNotEmpty) {
       return Scaffold(
         appBar: _buildAppBar(),
-        body: AppErrorState(
-          message: _errorMessage,
-          onRetry: _loadTracking,
-        ),
+        body: AppErrorState(message: _errorMessage, onRetry: _loadTracking),
       );
     }
 
@@ -188,9 +193,18 @@ class _DonorDonationStatusTrackingPageState
               subtitle: 'Everything the donor needs without leaving the page.',
               child: Column(
                 children: [
-                  _InfoRow(label: 'Recipient', value: widget.request.recipientName),
-                  _InfoRow(label: 'Phone', value: widget.request.recipientPhone),
-                  _InfoRow(label: 'Location', value: widget.request.recipientLocation),
+                  _InfoRow(
+                    label: 'Recipient',
+                    value: widget.request.recipientName,
+                  ),
+                  _InfoRow(
+                    label: 'Phone',
+                    value: widget.request.recipientPhone,
+                  ),
+                  _InfoRow(
+                    label: 'Location',
+                    value: widget.request.recipientLocation,
+                  ),
                   _InfoRow(
                     label: 'Category',
                     value: titleCaseLabel(snapshot.itemCategory),
@@ -220,26 +234,32 @@ class _DonorDonationStatusTrackingPageState
             const SizedBox(height: AppSpacing.md),
             _SectionCard(
               title: 'Timeline',
-              subtitle: 'Status history from request creation through handover.',
-              child: snapshot.timeline.isEmpty
-                  ? const Text(
-                      'No donation history recorded yet.',
-                      style: TextStyle(color: AppColors.mist),
-                    )
-                  : Column(
-                      children: [
-                        for (var index = 0; index < snapshot.timeline.length; index++) ...[
-                          _TimelineTile(
-                            entry: snapshot.timeline[index],
-                            isFirst: index == 0,
-                            isLast: index == snapshot.timeline.length - 1,
-                            isCurrent: index == snapshot.timeline.length - 1,
-                          ),
-                          if (index != snapshot.timeline.length - 1)
-                            const SizedBox(height: AppSpacing.md),
+              subtitle:
+                  'Status history from request creation through handover.',
+              child:
+                  snapshot.timeline.isEmpty
+                      ? const Text(
+                        'No donation history recorded yet.',
+                        style: TextStyle(color: AppColors.mist),
+                      )
+                      : Column(
+                        children: [
+                          for (
+                            var index = 0;
+                            index < snapshot.timeline.length;
+                            index++
+                          ) ...[
+                            _TimelineTile(
+                              entry: snapshot.timeline[index],
+                              isFirst: index == 0,
+                              isLast: index == snapshot.timeline.length - 1,
+                              isCurrent: index == snapshot.timeline.length - 1,
+                            ),
+                            if (index != snapshot.timeline.length - 1)
+                              const SizedBox(height: AppSpacing.md),
+                          ],
                         ],
-                      ],
-              ),
+                      ),
             ),
           ],
         ),
@@ -249,16 +269,17 @@ class _DonorDonationStatusTrackingPageState
 
   String _nextActionCopy(_TrackingSnapshot snapshot) {
     final requestStatus = snapshot.requestStatus.toLowerCase();
-    final handoverStatus = snapshot.handoverStatus.toLowerCase() == 'delivering'
-        ? (snapshot.hubId.isEmpty
-            ? 'delivering_to_recipient'
-            : 'delivering_to_hub')
-        : snapshot.handoverStatus.toLowerCase();
+    final handoverStatus =
+        snapshot.handoverStatus.toLowerCase() == 'delivering'
+            ? (snapshot.hubId.isEmpty
+                ? 'delivering_to_recipient'
+                : 'delivering_to_hub')
+            : snapshot.handoverStatus.toLowerCase();
     if (requestStatus == 'completed' || handoverStatus == 'completed') {
       return 'Donation lifecycle is complete.';
     }
     if (snapshot.handoverId.isEmpty) {
-      return 'Choose a handover point and continue the flow.';
+      return 'Confirm the recipient-selected handover method and continue the flow.';
     }
     if (handoverStatus == 'delivering_to_hub') {
       return 'Move the item to the community hub, then confirm hub receipt.';
@@ -409,19 +430,17 @@ class _HeroPanel extends StatelessWidget {
               if (handoverStatus.isNotEmpty)
                 _StatusChip(
                   label: 'Handover ${titleCaseLabel(handoverStatus)}',
-                  color: handoverStatus.toLowerCase() == 'completed'
-                      ? AppColors.mint
-                      : AppColors.sand,
+                  color:
+                      handoverStatus.toLowerCase() == 'completed'
+                          ? AppColors.mint
+                          : AppColors.sand,
                 ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
           Text(
             nextAction,
-            style: const TextStyle(
-              color: AppColors.white,
-              height: 1.5,
-            ),
+            style: const TextStyle(color: AppColors.white, height: 1.5),
           ),
         ],
       ),
@@ -450,10 +469,9 @@ class _SectionCard extends StatelessWidget {
           children: [
             Text(
               title,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
@@ -468,7 +486,6 @@ class _SectionCard extends StatelessWidget {
     );
   }
 }
-
 
 class _TimelineTile extends StatelessWidget {
   const _TimelineTile({
@@ -494,12 +511,16 @@ class _TimelineTile extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppRadius.md),
               border: Border.all(
-                color: isCurrent ? AppColors.white : AppColors.slate.withValues(alpha: 0.5),
+                color:
+                    isCurrent
+                        ? AppColors.white
+                        : AppColors.slate.withValues(alpha: 0.5),
                 width: isCurrent ? 1.8 : 1,
               ),
-              color: isCurrent
-                  ? AppColors.pine
-                  : AppColors.slate.withValues(alpha: 0.18),
+              color:
+                  isCurrent
+                      ? AppColors.pine
+                      : AppColors.slate.withValues(alpha: 0.18),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -515,7 +536,9 @@ class _TimelineTile extends StatelessWidget {
                 Text(
                   entry.changedAt == null
                       ? 'Time not available'
-                      : DateFormat('MMM d, yyyy h:mm a').format(entry.changedAt!),
+                      : DateFormat(
+                        'MMM d, yyyy h:mm a',
+                      ).format(entry.changedAt!),
                   style: TextStyle(
                     color: isCurrent ? AppColors.sand : AppColors.slate,
                   ),
@@ -539,10 +562,7 @@ class _TimelineTile extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
+  const _InfoRow({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -565,10 +585,7 @@ class _InfoRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(color: AppColors.mist),
-            ),
+            child: Text(value, style: const TextStyle(color: AppColors.mist)),
           ),
         ],
       ),
@@ -577,10 +594,7 @@ class _InfoRow extends StatelessWidget {
 }
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({
-    required this.label,
-    required this.color,
-  });
+  const _StatusChip({required this.label, required this.color});
 
   final String label;
   final Color color;

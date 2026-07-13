@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../constants.dart';
+import '../recipient/recipient_browse_community_hubs_page.dart';
 import '../../services/image_storage_service.dart';
 import '../../utils/image_utils.dart';
 
@@ -65,15 +66,17 @@ class _DonorListingPageState extends State<DonorListingPage> {
         throw Exception('User not authenticated');
       }
 
-      final snapshot = await _firestore
-          .collection('ITEM_LISTING')
-          .where('donorId', isEqualTo: donorId)
-          .get();
+      final snapshot =
+          await _firestore
+              .collection('ITEM_LISTING')
+              .where('donorId', isEqualTo: donorId)
+              .get();
 
-      final items = snapshot.docs
-          .map((doc) => DonorListingItem.fromFirestore(doc.data(), doc.id))
-          .toList()
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final items =
+          snapshot.docs
+              .map((doc) => DonorListingItem.fromFirestore(doc.data(), doc.id))
+              .toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
       if (!mounted) {
         return;
@@ -126,12 +129,15 @@ class _DonorListingPageState extends State<DonorListingPage> {
     List<DonorListingItem> items,
     String query,
   ) {
-    final normalizedAvailability = _selectedAvailabilityFilter.trim().toLowerCase();
+    final normalizedAvailability =
+        _selectedAvailabilityFilter.trim().toLowerCase();
     final normalizedQuery = query.trim().toLowerCase();
     return items.where((item) {
-      final matchesAvailability = normalizedAvailability == 'all' ||
+      final matchesAvailability =
+          normalizedAvailability == 'all' ||
           item.availabilityStatus.toLowerCase() == normalizedAvailability;
-      final matchesQuery = normalizedQuery.isEmpty ||
+      final matchesQuery =
+          normalizedQuery.isEmpty ||
           item.title.toLowerCase().contains(normalizedQuery) ||
           item.description.toLowerCase().contains(normalizedQuery) ||
           item.category.toLowerCase().contains(normalizedQuery) ||
@@ -170,10 +176,11 @@ class _DonorListingPageState extends State<DonorListingPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Material(
-        color: Colors.transparent,
-        child: _DonationFormSheet(item: item),
-      ),
+      builder:
+          (context) => Material(
+            color: Colors.transparent,
+            child: _DonationFormSheet(item: item),
+          ),
     );
 
     if (updated == true) {
@@ -206,12 +213,8 @@ class _DonorListingPageState extends State<DonorListingPage> {
         color: selected ? AppColors.mint : AppColors.sand,
         fontWeight: FontWeight.w600,
       ),
-      side: BorderSide(
-        color: selected ? AppColors.mint : AppColors.pine,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(999),
-      ),
+      side: BorderSide(color: selected ? AppColors.mint : AppColors.pine),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
     );
   }
 
@@ -228,7 +231,9 @@ class _DonorListingPageState extends State<DonorListingPage> {
   Future<void> _deleteSelectedDonations() async {
     if (_selectedForDelete.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select one or more donations to delete.')),
+        const SnackBar(
+          content: Text('Select one or more donations to delete.'),
+        ),
       );
       return;
     }
@@ -318,142 +323,151 @@ class _DonorListingPageState extends State<DonorListingPage> {
                   112,
                 ),
                 children: [
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    suffixIcon: _searchController.text.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () => _searchController.clear(),
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                    hintText: 'Search your donations',
+                  TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon:
+                          _searchController.text.isEmpty
+                              ? null
+                              : IconButton(
+                                onPressed: () => _searchController.clear(),
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                      hintText: 'Search your donations',
+                    ),
                   ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                SizedBox(
-                  height: 44,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    itemCount: 5,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(width: AppSpacing.sm),
-                    itemBuilder: (context, index) {
-                      switch (index) {
-                        case 0:
-                          return _buildAvailabilityFilterChip(
-                            label: 'All',
-                            value: 'all',
-                          );
-                        case 1:
-                          return _buildAvailabilityFilterChip(
-                            label: 'Available',
-                            value: 'available',
-                          );
-                        case 2:
-                          return _buildAvailabilityFilterChip(
-                            label: 'Reserved',
-                            value: 'reserved',
-                          );
-                        case 3:
-                          return _buildAvailabilityFilterChip(
-                            label: 'Claimed',
-                            value: 'claimed',
-                          );
-                        default:
-                          return _buildAvailabilityFilterChip(
-                            label: 'Expired',
-                            value: 'expired',
-                          );
-                      }
-                    },
+                  const SizedBox(height: AppSpacing.lg),
+                  SizedBox(
+                    height: 44,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: 5,
+                      separatorBuilder:
+                          (_, __) => const SizedBox(width: AppSpacing.sm),
+                      itemBuilder: (context, index) {
+                        switch (index) {
+                          case 0:
+                            return _buildAvailabilityFilterChip(
+                              label: 'All',
+                              value: 'all',
+                            );
+                          case 1:
+                            return _buildAvailabilityFilterChip(
+                              label: 'Available',
+                              value: 'available',
+                            );
+                          case 2:
+                            return _buildAvailabilityFilterChip(
+                              label: 'Reserved',
+                              value: 'reserved',
+                            );
+                          case 3:
+                            return _buildAvailabilityFilterChip(
+                              label: 'Claimed',
+                              value: 'claimed',
+                            );
+                          default:
+                            return _buildAvailabilityFilterChip(
+                              label: 'Expired',
+                              value: 'expired',
+                            );
+                        }
+                      },
+                    ),
                   ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _deleteMode
-                              ? '${_selectedForDelete.length} selected'
-                              : 'Select items to remove them in a batch',
-                          style: const TextStyle(
-                            color: AppColors.sand,
-                            fontWeight: FontWeight.w600,
+                  const SizedBox(height: AppSpacing.lg),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _deleteMode
+                                ? '${_selectedForDelete.length} selected'
+                                : 'Select items to remove them in a batch',
+                            style: const TextStyle(
+                              color: AppColors.sand,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                      TextButton.icon(
-                        onPressed: _toggleDeleteMode,
-                        icon: Icon(
-                          _deleteMode
-                              ? Icons.close_rounded
-                              : Icons.checklist_rounded,
-                        ),
-                        label: Text(_deleteMode ? 'Cancel' : 'Select'),
-                        style: TextButton.styleFrom(
-                          foregroundColor:
-                              _deleteMode ? AppColors.sand : AppColors.mint,
-                        ),
-                      ),
-                      if (_deleteMode) ...[
-                        const SizedBox(width: AppSpacing.sm),
                         TextButton.icon(
-                          onPressed: _deleteSelectedDonations,
-                          icon: const Icon(Icons.delete_forever_outlined),
-                          label: Text('Delete (${_selectedForDelete.length})'),
+                          onPressed: _toggleDeleteMode,
+                          icon: Icon(
+                            _deleteMode
+                                ? Icons.close_rounded
+                                : Icons.checklist_rounded,
+                          ),
+                          label: Text(_deleteMode ? 'Cancel' : 'Select'),
                           style: TextButton.styleFrom(
-                            foregroundColor: AppColors.coral,
+                            foregroundColor:
+                                _deleteMode ? AppColors.sand : AppColors.mint,
                           ),
                         ),
+                        if (_deleteMode) ...[
+                          const SizedBox(width: AppSpacing.sm),
+                          TextButton.icon(
+                            onPressed: _deleteSelectedDonations,
+                            icon: const Icon(Icons.delete_forever_outlined),
+                            label: Text(
+                              'Delete (${_selectedForDelete.length})',
+                            ),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.coral,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                ),
-                if (_isLoading)
-                  const Padding(
-                    padding: EdgeInsets.only(top: AppSpacing.xl),
-                    child: Center(
-                      child: CircularProgressIndicator(color: AppColors.mint),
                     ),
-                  )
-                else if (_errorMessage.isNotEmpty)
-                  _ErrorPanel(message: _errorMessage, onRetry: _fetchDonations)
-                else if (_filteredItems.isEmpty)
-                  _EmptyDonationsPanel(
-                    hasSearch: _searchController.text.trim().isNotEmpty,
-                    onAddPressed: () => _openDonationForm(),
-                  )
-                else
-                  ..._paginatedItems.map(
-                    (item) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                      child: _DonationCard(
-                        item: item,
-                        deleteMode: _deleteMode,
-                        isSelected: _selectedForDelete.contains(item.docId),
-                        onEdit: () => _openDonationForm(item: item),
-                        onToggleSelected: () =>
-                            _toggleSelectedForDelete(item.docId),
+                  ),
+                  if (_isLoading)
+                    const Padding(
+                      padding: EdgeInsets.only(top: AppSpacing.xl),
+                      child: Center(
+                        child: CircularProgressIndicator(color: AppColors.mint),
+                      ),
+                    )
+                  else if (_errorMessage.isNotEmpty)
+                    _ErrorPanel(
+                      message: _errorMessage,
+                      onRetry: _fetchDonations,
+                    )
+                  else if (_filteredItems.isEmpty)
+                    _EmptyDonationsPanel(
+                      hasSearch: _searchController.text.trim().isNotEmpty,
+                      onAddPressed: () => _openDonationForm(),
+                    )
+                  else
+                    ..._paginatedItems.map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                        child: _DonationCard(
+                          item: item,
+                          deleteMode: _deleteMode,
+                          isSelected: _selectedForDelete.contains(item.docId),
+                          onEdit: () => _openDonationForm(item: item),
+                          onToggleSelected:
+                              () => _toggleSelectedForDelete(item.docId),
+                        ),
                       ),
                     ),
-                  ),
-                if (_filteredItems.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  _PaginationBar(
-                    currentPage: _currentPage,
-                    totalPages: _totalPages,
-                    onPrevious:
-                        _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
-                    onNext: _currentPage + 1 < _totalPages
-                        ? () => _goToPage(_currentPage + 1)
-                        : null,
-                  ),
-                ],
+                  if (_filteredItems.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    _PaginationBar(
+                      currentPage: _currentPage,
+                      totalPages: _totalPages,
+                      onPrevious:
+                          _currentPage > 0
+                              ? () => _goToPage(_currentPage - 1)
+                              : null,
+                      onNext:
+                          _currentPage + 1 < _totalPages
+                              ? () => _goToPage(_currentPage + 1)
+                              : null,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -527,6 +541,10 @@ class DonorListingItem {
     required this.photoUrl,
     required this.quantity,
     required this.availabilityStatus,
+    required this.allowsIndependentPickup,
+    required this.allowsCommunityHubPickup,
+    required this.hubId,
+    required this.hubName,
     required this.createdAt,
     this.expiryDate,
   });
@@ -541,6 +559,10 @@ class DonorListingItem {
   final String photoUrl;
   final int quantity;
   final String availabilityStatus;
+  final bool allowsIndependentPickup;
+  final bool allowsCommunityHubPickup;
+  final String hubId;
+  final String hubName;
   final DateTime createdAt;
   final DateTime? expiryDate;
 
@@ -554,14 +576,21 @@ class DonorListingItem {
       title: data['title']?.toString() ?? '',
       description: data['description']?.toString() ?? '',
       donorId: data['donorId']?.toString() ?? '',
-      category: data['category']?.toString() ??
-          data['categoryId']?.toString() ??
-          '',
+      category:
+          data['category']?.toString() ?? data['categoryId']?.toString() ?? '',
       condition: data['condition']?.toString() ?? '',
       photoUrl: data['photoUrl']?.toString() ?? '',
       quantity: (data['quantity'] as num?)?.toInt() ?? 1,
-      availabilityStatus:
-          data['availabilityStatus']?.toString() ?? 'available',
+      availabilityStatus: data['availabilityStatus']?.toString() ?? 'available',
+      allowsIndependentPickup:
+          data['allowsIndependentPickup'] as bool? ??
+          ((data['allowsCommunityHubPickup'] as bool? ?? false) == false ||
+              (data['hubId']?.toString().trim().isEmpty ?? true)),
+      allowsCommunityHubPickup:
+          data['allowsCommunityHubPickup'] as bool? ??
+          (data['hubId']?.toString().trim().isNotEmpty ?? false),
+      hubId: data['hubId']?.toString().trim() ?? '',
+      hubName: data['hubName']?.toString().trim() ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       expiryDate: (data['expiryDate'] as Timestamp?)?.toDate(),
     );
@@ -601,25 +630,26 @@ class _DonationCard extends StatelessWidget {
                       child: SizedBox(
                         width: 84,
                         height: 84,
-                        child: item.photoUrl.isNotEmpty
-                            ? ImageUtils.base64ToImage(
-                                item.photoUrl,
-                                fit: BoxFit.cover,
-                                errorWidget: Container(
+                        child:
+                            item.photoUrl.isNotEmpty
+                                ? ImageUtils.base64ToImage(
+                                  item.photoUrl,
+                                  fit: BoxFit.cover,
+                                  errorWidget: Container(
+                                    color: AppColors.night,
+                                    child: const Icon(
+                                      Icons.inventory_2_outlined,
+                                      color: AppColors.mint,
+                                    ),
+                                  ),
+                                )
+                                : Container(
                                   color: AppColors.night,
                                   child: const Icon(
                                     Icons.inventory_2_outlined,
                                     color: AppColors.mint,
                                   ),
                                 ),
-                              )
-                            : Container(
-                                color: AppColors.night,
-                                child: const Icon(
-                                  Icons.inventory_2_outlined,
-                                  color: AppColors.mint,
-                                ),
-                              ),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.lg),
@@ -704,10 +734,29 @@ class _DonationCard extends StatelessWidget {
                             label: _categoryLabel(item.category),
                           ),
                         ),
+                        SizedBox(
+                          width: chipWidth,
+                          child: _MetaChip(
+                            icon: Icons.swap_horiz_outlined,
+                            label: _handoverMethodsLabel(item),
+                          ),
+                        ),
                       ],
                     );
                   },
                 ),
+                if (item.allowsCommunityHubPickup &&
+                    item.hubName.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'Hub pickup: ${item.hubName}',
+                    style: const TextStyle(
+                      color: AppColors.mist,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.lg),
                 Container(
                   height: 1,
@@ -725,7 +774,7 @@ class _DonationCard extends StatelessWidget {
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
-                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -750,10 +799,7 @@ class _DonationCard extends StatelessWidget {
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     'Expiry ${_formatDate(item.expiryDate!)}',
-                    style: const TextStyle(
-                      color: AppColors.mist,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: AppColors.mist, fontSize: 12),
                   ),
                 ],
               ],
@@ -766,10 +812,7 @@ class _DonationCard extends StatelessWidget {
 }
 
 class _MetaChip extends StatelessWidget {
-  const _MetaChip({
-    required this.icon,
-    required this.label,
-  });
+  const _MetaChip({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -793,11 +836,7 @@ class _MetaChip extends StatelessWidget {
           Icon(icon, size: 16, color: AppColors.mint),
           const SizedBox(width: 6),
           Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
         ],
       ),
@@ -829,10 +868,7 @@ class _EmptyDonationsPanel extends StatelessWidget {
             const SizedBox(height: AppSpacing.md),
             Text(
               hasSearch ? 'No matching donations' : 'No donations yet',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
@@ -840,10 +876,7 @@ class _EmptyDonationsPanel extends StatelessWidget {
                   ? 'Try a different search term.'
                   : 'Create your first donation item using the donor field layout.',
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.mist,
-                height: 1.5,
-              ),
+              style: const TextStyle(color: AppColors.mist, height: 1.5),
             ),
             if (!hasSearch) ...[
               const SizedBox(height: AppSpacing.lg),
@@ -861,10 +894,7 @@ class _EmptyDonationsPanel extends StatelessWidget {
 }
 
 class _ErrorPanel extends StatelessWidget {
-  const _ErrorPanel({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorPanel({required this.message, required this.onRetry});
 
   final String message;
   final Future<void> Function() onRetry;
@@ -884,10 +914,7 @@ class _ErrorPanel extends StatelessWidget {
               style: const TextStyle(color: AppColors.mist),
             ),
             const SizedBox(height: AppSpacing.lg),
-            ElevatedButton(
-              onPressed: onRetry,
-              child: const Text('Retry'),
-            ),
+            ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
       ),
@@ -946,8 +973,12 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
   late String _selectedCondition;
   late String _selectedCategoryId;
   late String _selectedAvailabilityStatus;
+  late bool _allowsIndependentPickup;
+  late bool _allowsCommunityHubPickup;
   File? _imageFile;
   String _photoUrl = '';
+  String? _selectedHubId;
+  String _selectedHubName = '';
   bool _isSaving = false;
   String? _errorMessage;
   DateTime? _expiryDate;
@@ -961,15 +992,18 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
     _titleController.text = item?.title ?? '';
     _descriptionController.text = item?.description ?? '';
     _quantityController.text = (item?.quantity ?? 1).toString();
-    _selectedCondition = _conditions.contains(item?.condition)
-        ? item!.condition
-        : 'Good';
+    _selectedCondition =
+        _conditions.contains(item?.condition) ? item!.condition : 'Good';
     _selectedCategoryId = _normalizeCategoryId(item?.category);
     _photoUrl = item?.photoUrl ?? '';
     _selectedAvailabilityStatus =
         _availabilityStatuses.contains(item?.availabilityStatus)
             ? item!.availabilityStatus
             : 'available';
+    _allowsIndependentPickup = item?.allowsIndependentPickup ?? true;
+    _allowsCommunityHubPickup = item?.allowsCommunityHubPickup ?? false;
+    _selectedHubId = item?.hubId.isNotEmpty == true ? item!.hubId : null;
+    _selectedHubName = item?.hubName ?? '';
     _expiryDate = item?.expiryDate;
   }
 
@@ -1036,6 +1070,28 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
     super.dispose();
   }
 
+  Future<void> _selectCommunityHub() async {
+    final selectedHub = await Navigator.of(context).push<CommunityHubBrowseRecord>(
+      MaterialPageRoute(
+        builder: (_) => RecipientBrowseCommunityHubsPage(
+          selectedHubId: _selectedHubId,
+          selectionEnabled: true,
+          standaloneTitle: 'Select Community Hub',
+        ),
+      ),
+    );
+
+    if (selectedHub == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _selectedHubId = selectedHub.hubId;
+      _selectedHubName = selectedHub.hubName;
+      _errorMessage = null;
+    });
+  }
+
   Future<void> _pickImage() async {
     try {
       final picked = await _picker.pickImage(
@@ -1081,6 +1137,21 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
       return;
     }
 
+    if (!_allowsIndependentPickup && !_allowsCommunityHubPickup) {
+      setState(() {
+        _errorMessage = 'Select at least one handover method.';
+      });
+      return;
+    }
+
+    if (_allowsCommunityHubPickup &&
+        (_selectedHubId == null || _selectedHubId!.isEmpty)) {
+      setState(() {
+        _errorMessage = 'Choose an approved community hub for hub pickup.';
+      });
+      return;
+    }
+
     setState(() {
       _isSaving = true;
       _errorMessage = null;
@@ -1112,24 +1183,30 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
 
       final payload = <String, dynamic>{
         'availabilityStatus': _selectedAvailabilityStatus,
+        'allowsCommunityHubPickup': _allowsCommunityHubPickup,
+        'allowsIndependentPickup': _allowsIndependentPickup,
         'category': _selectedCategoryId,
         'condition': _selectedCondition,
-        'createdAt': widget.item == null
-            ? Timestamp.now()
-            : Timestamp.fromDate(widget.item!.createdAt),
+        'createdAt':
+            widget.item == null
+                ? Timestamp.now()
+                : Timestamp.fromDate(widget.item!.createdAt),
         'description': _descriptionController.text.trim(),
         'donorId': donorId,
-        'expiryDate': expiryDate == null ? null : Timestamp.fromDate(expiryDate),
+        'expiryDate':
+            expiryDate == null ? null : Timestamp.fromDate(expiryDate),
+        'hubId': _allowsCommunityHubPickup ? _selectedHubId : null,
+        'hubName': _allowsCommunityHubPickup ? _selectedHubName : null,
         'itemId': itemId,
         'photoUrl': photoUrl,
         'quantity': int.parse(_quantityController.text.trim()),
         'title': _titleController.text.trim(),
       };
 
-      await _firestore.collection('ITEM_LISTING').doc(docId).set(
-            payload,
-            SetOptions(merge: _isEditing),
-          );
+      await _firestore
+          .collection('ITEM_LISTING')
+          .doc(docId)
+          .set(payload, SetOptions(merge: _isEditing));
 
       if (!mounted) {
         return;
@@ -1223,38 +1300,40 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
                             borderRadius: BorderRadius.circular(AppRadius.md),
                             border: Border.all(color: AppColors.pine),
                           ),
-                          child: _imageFile != null
-                              ? ClipRRect(
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadius.md),
-                                  child: Image.file(
-                                    _imageFile!,
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                  ),
-                                )
-                              : _photoUrl.trim().isNotEmpty
+                          child:
+                              _imageFile != null
                                   ? ClipRRect(
-                                      borderRadius:
-                                          BorderRadius.circular(AppRadius.md),
-                                      child: ImageUtils.base64ToImage(
-                                        _photoUrl,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    )
-                                  : const Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.add_photo_alternate_outlined,
-                                          size: 44,
-                                          color: AppColors.mint,
-                                        ),
-                                        SizedBox(height: AppSpacing.sm),
-                                        Text('Tap to add an image'),
-                                      ],
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadius.md,
                                     ),
+                                    child: Image.file(
+                                      _imageFile!,
+                                      fit: BoxFit.cover,
+                                      width: double.infinity,
+                                    ),
+                                  )
+                                  : _photoUrl.trim().isNotEmpty
+                                  ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadius.md,
+                                    ),
+                                    child: ImageUtils.base64ToImage(
+                                      _photoUrl,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  )
+                                  : const Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.add_photo_alternate_outlined,
+                                        size: 44,
+                                        color: AppColors.mint,
+                                      ),
+                                      SizedBox(height: AppSpacing.sm),
+                                      Text('Tap to add an image'),
+                                    ],
+                                  ),
                         ),
                         if (_imageFile != null || _photoUrl.trim().isNotEmpty)
                           Positioned(
@@ -1289,34 +1368,36 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
                   TextFormField(
                     controller: _titleController,
                     decoration: const InputDecoration(labelText: 'Title'),
-                    validator: (value) =>
-                        value == null || value.trim().isEmpty
-                            ? 'Enter the donation title'
-                            : null,
+                    validator:
+                        (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Enter the donation title'
+                                : null,
                   ),
                   const SizedBox(height: AppSpacing.md),
                   TextFormField(
                     controller: _descriptionController,
                     maxLines: 4,
-                    decoration:
-                        const InputDecoration(labelText: 'Description'),
-                    validator: (value) =>
-                        value == null || value.trim().isEmpty
-                            ? 'Enter a description'
-                            : null,
+                    decoration: const InputDecoration(labelText: 'Description'),
+                    validator:
+                        (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Enter a description'
+                                : null,
                   ),
                   const SizedBox(height: AppSpacing.md),
                   DropdownButtonFormField<String>(
-                    value: _selectedCategoryId,
+                    initialValue: _selectedCategoryId,
                     decoration: const InputDecoration(labelText: 'Category'),
-                    items: _categories
-                        .map(
-                          (category) => DropdownMenuItem<String>(
-                            value: category.value,
-                            child: Text(category.label),
-                          ),
-                        )
-                        .toList(),
+                    items:
+                        _categories
+                            .map(
+                              (category) => DropdownMenuItem<String>(
+                                value: category.value,
+                                child: Text(category.label),
+                              ),
+                            )
+                            .toList(),
                     onChanged: (value) {
                       if (value == null) {
                         return;
@@ -1354,17 +1435,19 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
                       const SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: _selectedCondition,
-                          decoration:
-                              const InputDecoration(labelText: 'Condition'),
-                          items: _conditions
-                              .map(
-                                (condition) => DropdownMenuItem<String>(
-                                  value: condition,
-                                  child: Text(condition),
-                                ),
-                              )
-                              .toList(),
+                          initialValue: _selectedCondition,
+                          decoration: const InputDecoration(
+                            labelText: 'Condition',
+                          ),
+                          items:
+                              _conditions
+                                  .map(
+                                    (condition) => DropdownMenuItem<String>(
+                                      value: condition,
+                                      child: Text(condition),
+                                    ),
+                                  )
+                                  .toList(),
                           onChanged: (value) {
                             if (value == null) {
                               return;
@@ -1377,24 +1460,155 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
                   ),
                   const SizedBox(height: AppSpacing.md),
                   DropdownButtonFormField<String>(
-                    value: _selectedAvailabilityStatus,
-                          decoration: const InputDecoration(
-                            labelText: 'Availability Status',
-                          ),
-                    items: _availabilityStatuses
-                        .map(
-                          (status) => DropdownMenuItem<String>(
-                            value: status,
-                            child: Text(_titleCase(status)),
-                          ),
-                        )
-                        .toList(),
+                    initialValue: _selectedAvailabilityStatus,
+                    decoration: const InputDecoration(
+                      labelText: 'Availability Status',
+                    ),
+                    items:
+                        _availabilityStatuses
+                            .map(
+                              (status) => DropdownMenuItem<String>(
+                                value: status,
+                                child: Text(_titleCase(status)),
+                              ),
+                            )
+                            .toList(),
                     onChanged: (value) {
                       if (value == null) {
                         return;
                       }
                       setState(() => _selectedAvailabilityStatus = value);
                     },
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: AppColors.forest,
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      border: Border.all(color: AppColors.pine),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Available Handover Methods',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        const Text(
+                          'Choose what recipients can request for this listing.',
+                          style: TextStyle(color: AppColors.mist, height: 1.45),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Wrap(
+                          spacing: AppSpacing.sm,
+                          runSpacing: AppSpacing.sm,
+                          children: [
+                            FilterChip(
+                              selected: _allowsIndependentPickup,
+                              label: const Text('Independent Pickup'),
+                              onSelected: (selected) {
+                                setState(() {
+                                  _allowsIndependentPickup = selected;
+                                });
+                              },
+                            ),
+                            FilterChip(
+                              selected: _allowsCommunityHubPickup,
+                              label: const Text('Community Hub Pickup'),
+                              onSelected: (selected) {
+                                setState(() {
+                                  _allowsCommunityHubPickup = selected;
+                                  if (!selected) {
+                                    _selectedHubId = null;
+                                    _selectedHubName = '';
+                                  }
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                        if (_allowsCommunityHubPickup) ...[
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            'Approved Community Hub',
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          InkWell(
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                            onTap: _selectCommunityHub,
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(AppSpacing.md),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(AppRadius.sm),
+                                border: Border.all(color: AppColors.mint),
+                                color: AppColors.forest,
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _selectedHubName.isNotEmpty
+                                              ? _selectedHubName
+                                              : 'Browse community hubs',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleSmall
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w700,
+                                                color: _selectedHubName.isNotEmpty
+                                                    ? AppColors.white
+                                                    : AppColors.sand,
+                                              ),
+                                        ),
+                                        const SizedBox(height: AppSpacing.xs),
+                                        Text(
+                                          _selectedHubId?.isNotEmpty == true
+                                              ? 'Hub ID: $_selectedHubId'
+                                              : 'Open the hub list and select an approved pickup hub.',
+                                          style: const TextStyle(
+                                            color: AppColors.mist,
+                                            height: 1.4,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppSpacing.sm),
+                                  const Icon(
+                                    Icons.arrow_forward_ios_rounded,
+                                    size: 18,
+                                    color: AppColors.mint,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: _selectCommunityHub,
+                              icon: const Icon(Icons.storefront_outlined),
+                              label: Text(
+                                _selectedHubId?.isNotEmpty == true
+                                    ? 'Change Selected Hub'
+                                    : 'Browse Community Hubs',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   if (_selectedCategoryId == 'consumables') ...[
@@ -1426,24 +1640,27 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: _isSaving ? null : _submit,
-                      icon: _isSaving
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.night,
+                      icon:
+                          _isSaving
+                              ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.night,
+                                ),
+                              )
+                              : Icon(
+                                _isEditing
+                                    ? Icons.save_outlined
+                                    : Icons.add_circle_outline,
                               ),
-                            )
-                          : Icon(_isEditing
-                              ? Icons.save_outlined
-                              : Icons.add_circle_outline),
                       label: Text(
                         _isSaving
                             ? 'Saving...'
                             : _isEditing
-                                ? 'Save Changes'
-                                : 'Create Donation',
+                            ? 'Save Changes'
+                            : 'Create Donation',
                       ),
                     ),
                   ),
@@ -1479,6 +1696,16 @@ String _categoryLabel(String category) {
     'others' => 'Others',
     _ => _titleCase(category),
   };
+}
+
+String _handoverMethodsLabel(DonorListingItem item) {
+  if (item.allowsIndependentPickup && item.allowsCommunityHubPickup) {
+    return 'Both methods';
+  }
+  if (item.allowsCommunityHubPickup) {
+    return 'Hub pickup';
+  }
+  return 'Independent';
 }
 
 String _formatDate(DateTime date) {

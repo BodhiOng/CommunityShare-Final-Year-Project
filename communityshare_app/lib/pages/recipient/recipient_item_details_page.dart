@@ -11,16 +11,12 @@ import '../../constants.dart';
 import '../donor/donor_public_profile_page.dart';
 import '../donor/donor_incoming_requests_page.dart';
 import '../../models/item_listing.dart';
-import 'recipient_browse_community_hubs_page.dart';
 import 'recipient_request_status_page.dart';
 import '../../utils/image_utils.dart';
 import '../../widgets/state_widgets.dart';
 
 class RecipientItemDetailsPage extends StatefulWidget {
-  const RecipientItemDetailsPage({
-    super.key,
-    required this.item,
-  });
+  const RecipientItemDetailsPage({super.key, required this.item});
 
   final ItemListing item;
 
@@ -37,44 +33,38 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final TextEditingController _requestNoteController = TextEditingController();
-  final TextEditingController _manualHubController = TextEditingController();
   final TextEditingController _reportReasonController = TextEditingController();
 
   bool _isSubmitting = false;
   bool _isSubmittingReport = false;
   bool _isLoadingDonor = true;
-  bool _isLoadingHubs = true;
   bool _isLoadingRequest = true;
   Map<String, dynamic>? _donorData;
-  List<CommunityHubBrowseRecord> _hubOptions = const [];
   RecipientRequestRecord? _currentRequest;
-  CommunityHubBrowseRecord? _selectedHub;
+  late String _selectedHandoverType;
 
   @override
   void initState() {
     super.initState();
+    _selectedHandoverType = _defaultHandoverType();
     _loadDonor();
-    _loadHubOptions();
     _loadCurrentRequest();
   }
 
   @override
   void dispose() {
     _requestNoteController.dispose();
-    _manualHubController.dispose();
     _reportReasonController.dispose();
     super.dispose();
   }
 
   Future<void> _loadDonor() async {
     try {
-      final userDoc = await _firestore.collection('USER').doc(widget.item.donorId).get();
+      final userDoc =
+          await _firestore.collection('USER').doc(widget.item.donorId).get();
       final legacyDoc =
           await _firestore.collection('USER').doc(widget.item.donorId).get();
-      final data = <String, dynamic>{
-        ...?legacyDoc.data(),
-        ...?userDoc.data(),
-      };
+      final data = <String, dynamic>{...?legacyDoc.data(), ...?userDoc.data()};
 
       if (!mounted) {
         return;
@@ -95,40 +85,6 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     }
   }
 
-  Future<void> _loadHubOptions() async {
-    try {
-      final snapshot = await _firestore.collection('COMMUNITY_HUB').get();
-      final hubs = snapshot.docs
-          .map(
-            (doc) => CommunityHubBrowseRecord.fromFirestore(doc.id, doc.data()),
-          )
-          .where((hub) => hub.status.toLowerCase() == 'active')
-          .toList(growable: false)
-        ..sort(
-          (left, right) =>
-              left.hubName.toLowerCase().compareTo(right.hubName.toLowerCase()),
-        );
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _hubOptions = hubs;
-        _selectedHub = hubs.isNotEmpty ? hubs.first : null;
-        _isLoadingHubs = false;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _isLoadingHubs = false;
-      });
-    }
-  }
-
   Future<void> _loadCurrentRequest() async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -143,23 +99,25 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     }
 
     try {
-      final snapshot = await _firestore
-          .collection('ITEM_REQUEST')
-          .where('itemId', isEqualTo: widget.item.itemId)
-          .where('recipientId', isEqualTo: user.uid)
-          .limit(10)
-          .get();
+      final snapshot =
+          await _firestore
+              .collection('ITEM_REQUEST')
+              .where('itemId', isEqualTo: widget.item.itemId)
+              .where('recipientId', isEqualTo: user.uid)
+              .limit(10)
+              .get();
 
-      final docs = [...snapshot.docs]
-        ..sort((left, right) {
-          final leftDate = _readDateTime(left.data()['updatedAt']) ??
-              _readDateTime(left.data()['requestedAt']) ??
-              DateTime.fromMillisecondsSinceEpoch(0);
-          final rightDate = _readDateTime(right.data()['updatedAt']) ??
-              _readDateTime(right.data()['requestedAt']) ??
-              DateTime.fromMillisecondsSinceEpoch(0);
-          return rightDate.compareTo(leftDate);
-        });
+      final docs = [...snapshot.docs]..sort((left, right) {
+        final leftDate =
+            _readDateTime(left.data()['updatedAt']) ??
+            _readDateTime(left.data()['requestedAt']) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final rightDate =
+            _readDateTime(right.data()['updatedAt']) ??
+            _readDateTime(right.data()['requestedAt']) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return rightDate.compareTo(leftDate);
+      });
 
       QueryDocumentSnapshot<Map<String, dynamic>>? selected;
       for (final doc in docs) {
@@ -194,34 +152,48 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     final user = _auth.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You need to sign in before requesting an item.')),
+        const SnackBar(
+          content: Text('You need to sign in before requesting an item.'),
+        ),
       );
       return false;
     }
 
     if (!widget.item.isAvailable) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This listing is not available for requests.')),
+        const SnackBar(
+          content: Text('This listing is not available for requests.'),
+        ),
       );
       return false;
     }
 
-    final hubId = _selectedHub?.hubId.trim().isNotEmpty == true
-        ? _selectedHub!.hubId.trim()
-        : _manualHubController.text.trim();
     final requestNote = _requestNoteController.text.trim();
+    final handoverType = _selectedHandoverType;
+
+    if (!_isAllowedHandoverType(handoverType)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Choose one of the handover methods offered by the donor.',
+          ),
+        ),
+      );
+      return false;
+    }
 
     setState(() {
       _isSubmitting = true;
     });
 
     try {
-      final existing = await _firestore
-          .collection('ITEM_REQUEST')
-          .where('itemId', isEqualTo: widget.item.itemId)
-          .where('recipientId', isEqualTo: user.uid)
-          .limit(10)
-          .get();
+      final existing =
+          await _firestore
+              .collection('ITEM_REQUEST')
+              .where('itemId', isEqualTo: widget.item.itemId)
+              .where('recipientId', isEqualTo: user.uid)
+              .limit(10)
+              .get();
 
       final hasActiveRequest = existing.docs.any((doc) {
         final data = doc.data();
@@ -246,6 +218,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
       final requestId = _newRequestId();
       final payload = <String, dynamic>{
         'requestId': requestId,
+        'handoverType': handoverType,
         'itemId': widget.item.itemId,
         'recipientId': user.uid,
         'requestStatus': 'pending',
@@ -253,8 +226,9 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      if (hubId.isNotEmpty) {
-        payload['hubId'] = hubId;
+      if (handoverType == 'community_hub_pickup') {
+        payload['hubId'] = widget.item.hubId;
+        payload['hubName'] = widget.item.hubName;
       }
 
       if (requestNote.isNotEmpty) {
@@ -271,14 +245,16 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
         _isSubmitting = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Request submitted. The donor can review it now.')),
+        const SnackBar(
+          content: Text('Request submitted. The donor can review it now.'),
+        ),
       );
       await _loadCurrentRequest();
       return true;
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to submit request: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to submit request: $e')));
       setState(() {
         _isSubmitting = false;
       });
@@ -310,24 +286,27 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                   break;
               }
             },
-            itemBuilder: (context) => [
-              PopupMenuItem<_ItemDetailsMenuAction>(
-                value: _ItemDetailsMenuAction.report,
-                child: Row(
-                  children: [
-                    const Icon(Icons.flag_outlined, color: AppColors.coral),
-                    const SizedBox(width: AppSpacing.sm),
-                    Text(
-                      'Report item/user',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            itemBuilder:
+                (context) => [
+                  PopupMenuItem<_ItemDetailsMenuAction>(
+                    value: _ItemDetailsMenuAction.report,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.flag_outlined, color: AppColors.coral),
+                        const SizedBox(width: AppSpacing.sm),
+                        Text(
+                          'Report item/user',
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.copyWith(
                             color: AppColors.coral,
                             fontWeight: FontWeight.w700,
                           ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+                ],
           ),
         ],
       ),
@@ -366,10 +345,12 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                       color: AppColors.pine,
                     ),
                     _DetailPill(
-                      label: item.isAvailable
-                          ? 'Available'
-                          : item.availabilityStatus,
-                      color: item.isAvailable ? AppColors.mint : AppColors.coral,
+                      label:
+                          item.isAvailable
+                              ? 'Available'
+                              : item.availabilityStatus,
+                      color:
+                          item.isAvailable ? AppColors.mint : AppColors.coral,
                     ),
                   ],
                 ),
@@ -377,8 +358,8 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                 Text(
                   item.title,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 Card(
@@ -386,10 +367,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                     padding: const EdgeInsets.all(AppSpacing.md),
                     child: Column(
                       children: [
-                        _DetailRow(
-                          label: 'Condition',
-                          value: item.condition,
-                        ),
+                        _DetailRow(label: 'Condition', value: item.condition),
                         _DetailRow(
                           label: 'Quantity',
                           value: '${item.quantity}',
@@ -410,24 +388,21 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                 const SizedBox(height: AppSpacing.lg),
                 Text(
                   'Description',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   item.description,
-                  style: const TextStyle(
-                    color: AppColors.mist,
-                    height: 1.6,
-                  ),
+                  style: const TextStyle(color: AppColors.mist, height: 1.6),
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 Text(
                   'Donor',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 if (_isLoadingDonor)
@@ -441,11 +416,12 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
-                          builder: (_) => DonorPublicProfilePage(
-                            donorId: widget.item.donorId,
-                            initialDonorData: _donorData,
-                            highlightedItemId: widget.item.itemId,
-                          ),
+                          builder:
+                              (_) => DonorPublicProfilePage(
+                                donorId: widget.item.donorId,
+                                initialDonorData: _donorData,
+                                highlightedItemId: widget.item.itemId,
+                              ),
                         ),
                       );
                     },
@@ -468,19 +444,23 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                                 const SizedBox(width: AppSpacing.md),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         _donorDisplayName,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleMedium
-                                            ?.copyWith(fontWeight: FontWeight.w700),
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
                                       const SizedBox(height: AppSpacing.xs),
                                       Text(
                                         _donorLocation,
-                                        style: const TextStyle(color: AppColors.mist),
+                                        style: const TextStyle(
+                                          color: AppColors.mist,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -516,7 +496,7 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: AppSpacing.sm)
+                            const SizedBox(height: AppSpacing.sm),
                           ],
                         ),
                       ),
@@ -526,7 +506,8 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                     item.isExpired) ...[
                   const SizedBox(height: AppSpacing.lg),
                   const AppErrorState(
-                    message: 'This item is past its expiry date and cannot be requested.',
+                    message:
+                        'This item is past its expiry date and cannot be requested.',
                   ),
                 ],
               ],
@@ -576,83 +557,83 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                     Text(
                       'Request ${widget.item.title}',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    const Text(
-                      'Send a request, tied to a pickup hub or independent. You can also add a note on why you wanted the item',
-                      style: TextStyle(color: AppColors.mist, height: 1.5),
+                    Text(
+                      _requestSheetDescription(),
+                      style: const TextStyle(
+                        color: AppColors.mist,
+                        height: 1.5,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.lg),
-                    if (_isLoadingHubs)
-                      const AppLoadingState(message: 'Loading pickup hubs...')
-                    else if (_hubOptions.isNotEmpty) ...[
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpacing.md),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Pickup hub',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w700),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Handover Method',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: AppSpacing.xs),
+                            const Text(
+                              'Choose from the methods enabled by the donor for this listing.',
+                              style: TextStyle(
+                                color: AppColors.mist,
+                                height: 1.5,
                               ),
-                              const SizedBox(height: AppSpacing.xs),
-                              const Text(
-                                'Browse active community hubs to review their details before linking one to this request.',
-                                style: TextStyle(
-                                  color: AppColors.mist,
-                                  height: 1.5,
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.md),
-                              if (_selectedHub != null) ...[
-                                _HubSelectionSummary(hub: _selectedHub!),
-                                const SizedBox(height: AppSpacing.md),
-                              ],
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed: () async {
-                                    final hub =
-                                        await Navigator.of(context).push<CommunityHubBrowseRecord>(
-                                      MaterialPageRoute(
-                                        builder: (_) => RecipientBrowseCommunityHubsPage(
-                                          selectedHubId: _selectedHub?.hubId,
-                                          selectionEnabled: true,
-                                        ),
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                            RadioGroup<String>(
+                              groupValue: _selectedHandoverType,
+                              onChanged: (value) {
+                                if (value == null) {
+                                  return;
+                                }
+                                setSheetState(() {
+                                  _selectedHandoverType = value;
+                                });
+                              },
+                              child: Column(
+                                children: [
+                                  if (widget.item.allowsIndependentPickup)
+                                    const RadioListTile<String>(
+                                      contentPadding: EdgeInsets.zero,
+                                      value: 'independent_pickup',
+                                      title: Text('Independent Pickup'),
+                                      subtitle: Text(
+                                        'Arrange the handover directly with the donor through the app.',
                                       ),
-                                    );
-                                    if (hub == null || !context.mounted) {
-                                      return;
-                                    }
-                                    setSheetState(() {
-                                      _selectedHub = hub;
-                                      _manualHubController.clear();
-                                    });
-                                  },
-                                  icon: const Icon(Icons.storefront_outlined),
-                                  label: const Text('Browse Community Hubs'),
-                                ),
+                                    ),
+                                  if (_supportsCommunityHubPickup) ...[
+                                    RadioListTile<String>(
+                                      contentPadding: EdgeInsets.zero,
+                                      value: 'community_hub_pickup',
+                                      title: const Text('Community Hub Pickup'),
+                                      subtitle: Text(
+                                        widget.item.hubName.isNotEmpty
+                                            ? 'Pick up through ${widget.item.hubName}.'
+                                            : 'Pick up through the donor-selected community hub.',
+                                      ),
+                                    ),
+                                    const SizedBox(height: AppSpacing.sm),
+                                    _SelectedHubSummary(
+                                      hubName: widget.item.hubName,
+                                      hubId: widget.item.hubId,
+                                    ),
+                                  ],
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                    ] else ...[
-                      TextField(
-                        controller: _manualHubController,
-                        decoration: const InputDecoration(
-                          labelText: 'Hub ID (optional)',
-                          helperText:
-                              'Optional. Leave blank if you do not want to link a hub.',
-                        ),
-                      ),
-                    ],
+                    ),
                     const SizedBox(height: AppSpacing.md),
                     TextField(
                       controller: _requestNoteController,
@@ -666,14 +647,15 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: _isSubmitting
-                            ? null
-                            : () async {
-                                final success = await _submitRequest();
-                                if (success && context.mounted) {
-                                  Navigator.of(context).pop();
-                                }
-                              },
+                        onPressed:
+                            _isSubmitting
+                                ? null
+                                : () async {
+                                  final success = await _submitRequest();
+                                  if (success && context.mounted) {
+                                    Navigator.of(context).pop();
+                                  }
+                                },
                         child: Text(
                           _isSubmitting ? 'Submitting...' : 'Submit request',
                         ),
@@ -730,9 +712,9 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                       Text(
                         'Report ${widget.item.title}',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.coral,
-                            ),
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.coral,
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       const Text(
@@ -772,16 +754,17 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                             backgroundColor: AppColors.coral,
                             foregroundColor: AppColors.white,
                           ),
-                          icon: _isSubmittingReport
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: AppColors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.flag_outlined),
+                          icon:
+                              _isSubmittingReport
+                                  ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.white,
+                                    ),
+                                  )
+                                  : const Icon(Icons.flag_outlined),
                           label: Text(
                             _isSubmittingReport
                                 ? 'Submitting report...'
@@ -804,7 +787,9 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     final user = _auth.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You need to sign in before reporting an item.')),
+        const SnackBar(
+          content: Text('You need to sign in before reporting an item.'),
+        ),
       );
       return false;
     }
@@ -932,10 +917,11 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
       return phone;
     }
 
-    final combined = [
-      if (phoneCode != null && phoneCode.isNotEmpty) phoneCode,
-      if (localPhone != null && localPhone.isNotEmpty) localPhone,
-    ].join(' ').trim();
+    final combined =
+        [
+          if (phoneCode != null && phoneCode.isNotEmpty) phoneCode,
+          if (localPhone != null && localPhone.isNotEmpty) localPhone,
+        ].join(' ').trim();
 
     if (combined.isNotEmpty) {
       return combined;
@@ -989,9 +975,10 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
   ) {
     final data = doc.data();
     return RecipientRequestRecord(
-      requestId: data['requestId']?.toString().trim().isNotEmpty == true
-          ? data['requestId'].toString().trim()
-          : doc.id,
+      requestId:
+          data['requestId']?.toString().trim().isNotEmpty == true
+              ? data['requestId'].toString().trim()
+              : doc.id,
       docId: doc.id,
       itemId: data['itemId']?.toString().trim() ?? widget.item.itemId,
       itemDocId: '',
@@ -1000,7 +987,9 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
       itemQuantity: widget.item.quantity,
       availabilityStatus: widget.item.availabilityStatus,
       donorId: widget.item.donorId,
+      handoverType: data['handoverType']?.toString().trim() ?? '',
       hubId: data['hubId']?.toString().trim() ?? '',
+      hubName: data['hubName']?.toString().trim() ?? widget.item.hubName,
       requestNote: data['requestNote']?.toString().trim() ?? '',
       requestStatus: data['requestStatus']?.toString().trim() ?? 'pending',
       requestedAt: _readDateTime(data['requestedAt']),
@@ -1041,7 +1030,8 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
               onPressed: () async {
                 await Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => RecipientRequestStatusPage(request: request),
+                    builder:
+                        (_) => RecipientRequestStatusPage(request: request),
                   ),
                 );
                 if (mounted) {
@@ -1076,17 +1066,59 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
       );
     }
 
+    final canRequest = item.isAvailable && _hasRequestableHandoverOptions(item);
     return ElevatedButton.icon(
-      onPressed: item.isAvailable ? _showRequestSheet : null,
-      icon: _isSubmitting
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.volunteer_activism_outlined),
-      label: Text(item.isAvailable ? 'Request Item' : 'Not Requestable'),
+      onPressed: canRequest ? _showRequestSheet : null,
+      icon:
+          _isSubmitting
+              ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+              : const Icon(Icons.volunteer_activism_outlined),
+      label: Text(canRequest ? 'Request Item' : 'Not Requestable'),
     );
+  }
+
+  bool get _supportsCommunityHubPickup {
+    return widget.item.allowsCommunityHubPickup && widget.item.hubId.isNotEmpty;
+  }
+
+  String _defaultHandoverType() {
+    if (widget.item.allowsIndependentPickup) {
+      return 'independent_pickup';
+    }
+    if (_supportsCommunityHubPickup) {
+      return 'community_hub_pickup';
+    }
+    return '';
+  }
+
+  bool _isAllowedHandoverType(String value) {
+    switch (value) {
+      case 'independent_pickup':
+        return widget.item.allowsIndependentPickup;
+      case 'community_hub_pickup':
+        return _supportsCommunityHubPickup;
+      default:
+        return false;
+    }
+  }
+
+  bool _hasRequestableHandoverOptions(ItemListing item) {
+    return item.allowsIndependentPickup ||
+        (item.allowsCommunityHubPickup && item.hubId.isNotEmpty);
+  }
+
+  String _requestSheetDescription() {
+    if (widget.item.allowsIndependentPickup && _supportsCommunityHubPickup) {
+      return 'Choose either independent pickup or the donor-selected community hub when you submit this request.';
+    }
+    if (_supportsCommunityHubPickup) {
+      return 'This listing is available through the donor-selected community hub only.';
+    }
+    return 'This listing is available through independent pickup only.';
   }
 
   static bool _isActiveRequestStatus(String status) {
@@ -1130,12 +1162,11 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
   }
 }
 
-class _HubSelectionSummary extends StatelessWidget {
-  const _HubSelectionSummary({
-    required this.hub,
-  });
+class _SelectedHubSummary extends StatelessWidget {
+  const _SelectedHubSummary({required this.hubName, required this.hubId});
 
-  final CommunityHubBrowseRecord hub;
+  final String hubName;
+  final String hubId;
 
   @override
   Widget build(BuildContext context) {
@@ -1151,35 +1182,20 @@ class _HubSelectionSummary extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            hub.hubName,
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
+            hubName.isNotEmpty ? hubName : 'Community Hub',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Hub ID: ${hub.hubId}',
+            'Hub ID: ${hubId.isNotEmpty ? hubId : 'Not available'}',
             style: const TextStyle(color: AppColors.slate),
           ),
           const SizedBox(height: AppSpacing.sm),
-          Text(
-            hub.address.isNotEmpty ? hub.address : 'Address not provided',
-            style: const TextStyle(color: AppColors.mist),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            hub.operatingHours.isNotEmpty
-                ? hub.operatingHours
-                : 'Operating hours not provided',
-            style: const TextStyle(color: AppColors.mist),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            hub.contactNumber.isNotEmpty
-                ? hub.contactNumber
-                : 'Contact number not provided',
-            style: const TextStyle(color: AppColors.mist),
+          const Text(
+            'This hub was preselected by the donor for community hub pickup.',
+            style: TextStyle(color: AppColors.mist, height: 1.5),
           ),
         ],
       ),
@@ -1188,10 +1204,7 @@ class _HubSelectionSummary extends StatelessWidget {
 }
 
 class _DetailPill extends StatelessWidget {
-  const _DetailPill({
-    required this.label,
-    required this.color,
-  });
+  const _DetailPill({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -1220,10 +1233,7 @@ class _DetailPill extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-  });
+  const _DetailRow({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -1247,10 +1257,7 @@ class _DetailRow extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(color: AppColors.mist),
-            ),
+            child: Text(value, style: const TextStyle(color: AppColors.mist)),
           ),
         ],
       ),

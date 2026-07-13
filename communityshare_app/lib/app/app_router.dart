@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../features/auth/auth_wrapper.dart';
+import '../features/auth/forgot_password_page.dart';
 import '../features/auth/login_page.dart';
+import '../features/auth/register_page.dart';
 import 'app_routes.dart';
 import 'app_shell.dart';
 import 'user_role.dart';
@@ -19,24 +21,33 @@ class AppRouter {
           builder: (_) => const LoginPage(),
           settings: settings,
         );
+      case AppRoutes.register:
+        return MaterialPageRoute(
+          builder: (_) => const RegisterPage(),
+          settings: settings,
+        );
+      case AppRoutes.forgotPassword:
+        return MaterialPageRoute(
+          builder: (_) => const ForgotPasswordPage(),
+          settings: settings,
+        );
       case AppRoutes.shell:
         final args = settings.arguments;
-        final config = args is AppShellArguments
-            ? args
-            : const AppShellArguments(role: UserRole.recipient);
+        final config =
+            args is AppShellArguments
+                ? args
+                : const AppShellArguments(role: UserRole.recipient);
         return MaterialPageRoute(
-          builder: (_) => AppShell(
-            role: config.role,
-            initialIndex: config.initialIndex,
-          ),
+          builder:
+              (_) => AppShell(
+                role: config.role,
+                initialIndex: config.initialIndex,
+              ),
           settings: settings,
         );
       case AppRoutes.donorListings:
         return MaterialPageRoute(
-          builder: (_) => const AppShell(
-            role: UserRole.donor,
-            initialIndex: 0,
-          ),
+          builder: (_) => const AppShell(role: UserRole.donor, initialIndex: 0),
           settings: settings,
         );
       default:
@@ -49,10 +60,7 @@ class AppRouter {
 }
 
 class AppShellArguments {
-  const AppShellArguments({
-    required this.role,
-    this.initialIndex = 0,
-  });
+  const AppShellArguments({required this.role, this.initialIndex = 0});
 
   final UserRole role;
   final int initialIndex;

@@ -1,4 +1,4 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -20,11 +20,7 @@ import '../widgets/state_widgets.dart';
 import 'user_role.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({
-    super.key,
-    required this.role,
-    this.initialIndex = 0,
-  });
+  const AppShell({super.key, required this.role, this.initialIndex = 0});
 
   final UserRole role;
   final int initialIndex;
@@ -103,10 +99,12 @@ class _AppShellState extends State<AppShell> {
       builder: (context, snapshot) {
         final status =
             snapshot.data?.data()?['status']?.toString().trim().toLowerCase() ??
-                'active';
+            'active';
         final isInactive = _isInactiveStatus(status);
-        final safeIndex = (isInactive ? profileIndex : _selectedIndex)
-            .clamp(0, tabs.length - 1);
+        final safeIndex = (isInactive ? profileIndex : _selectedIndex).clamp(
+          0,
+          tabs.length - 1,
+        );
 
         if (isInactive && _selectedIndex != profileIndex) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -127,11 +125,12 @@ class _AppShellState extends State<AppShell> {
             for (final tab in tabs)
               ShellDestinationData(icon: tab.icon, label: tab.label),
           ],
-          onTap: (index) => _handleTabTap(
-            index: index,
-            profileIndex: profileIndex,
-            isInactive: isInactive,
-          ),
+          onTap:
+              (index) => _handleTabTap(
+                index: index,
+                profileIndex: profileIndex,
+                isInactive: isInactive,
+              ),
           role: widget.role,
           child: tabs[safeIndex].builder(context),
         );
@@ -264,29 +263,32 @@ Widget _donorListings(BuildContext context) => const DonorListingPage();
 Widget _donorIncomingRequests(BuildContext context) =>
     const DonorIncomingRequestsPage();
 
-Widget _donorDonationTracking(BuildContext context) =>
-    const _DonorRequestLauncherPage(
-      title: 'Donation Tracking',
-      emptyTitle: 'No trackable requests yet',
-      emptyMessage:
-          'Approved or scheduled requests will appear here so you can review status and complete the handover flow.',
-      actionLabel: 'Open Tracking',
-      actionIcon: Icons.timeline_outlined,
-      builder: DonorDonationStatusTrackingPage.new,
-    );
+Widget _donorDonationTracking(
+  BuildContext context,
+) => const _DonorRequestLauncherPage(
+  title: 'Donation Tracking',
+  emptyTitle: 'No trackable requests yet',
+  emptyMessage:
+      'Approved or scheduled requests will appear here so you can review status and complete the handover flow.',
+  actionLabel: 'Open Tracking',
+  actionIcon: Icons.timeline_outlined,
+  builder: DonorDonationStatusTrackingPage.new,
+);
 
-Widget _donorHandoverPoint(BuildContext context) =>
-    const _DonorRequestLauncherPage(
-      title: 'Select Handover Point',
-      emptyTitle: 'No requests ready for handover',
-      emptyMessage:
-          'Once a request is approved, you can choose the COMMUNITY_HUB handover point from here.',
-      actionLabel: 'Open Handover',
-      actionIcon: Icons.location_on_outlined,
-      builder: DonorSelectHandoverPointPage.new,
-    );
+Widget _donorHandoverPoint(
+  BuildContext context,
+) => const _DonorRequestLauncherPage(
+  title: 'Select Handover Point',
+  emptyTitle: 'No requests ready for handover',
+  emptyMessage:
+      'Once a request is approved, you can confirm the recipient-selected handover method from here.',
+  actionLabel: 'Open Handover',
+  actionIcon: Icons.location_on_outlined,
+  builder: DonorSelectHandoverPointPage.new,
+);
 
-Widget _recipientBrowse(BuildContext context) => const RecipientBrowseItemsPage();
+Widget _recipientBrowse(BuildContext context) =>
+    const RecipientBrowseItemsPage();
 
 Widget _recipientBrowseHubs(BuildContext context) =>
     const RecipientBrowseCommunityHubsPage();
@@ -319,7 +321,8 @@ class _DonorRequestLauncherPage extends StatefulWidget {
   final String emptyMessage;
   final String actionLabel;
   final IconData actionIcon;
-  final Widget Function({Key? key, required DonorIncomingRequestRecord request}) builder;
+  final Widget Function({Key? key, required DonorIncomingRequestRecord request})
+  builder;
 
   @override
   State<_DonorRequestLauncherPage> createState() =>
@@ -377,10 +380,11 @@ class _RecipientRequestStatusLauncherPageState
         throw Exception('User not authenticated');
       }
 
-      final requestSnapshot = await _firestore
-          .collection('ITEM_REQUEST')
-          .where('recipientId', isEqualTo: userId)
-          .get();
+      final requestSnapshot =
+          await _firestore
+              .collection('ITEM_REQUEST')
+              .where('recipientId', isEqualTo: userId)
+              .get();
 
       final itemIds = requestSnapshot.docs
           .map((doc) => doc.data()['itemId']?.toString().trim() ?? '')
@@ -390,52 +394,65 @@ class _RecipientRequestStatusLauncherPageState
 
       final listingsByItemId = <String, Map<String, dynamic>>{};
       for (final chunk in _chunkStrings(itemIds, 10)) {
-        final snapshot = await _firestore
-            .collection('ITEM_LISTING')
-            .where('itemId', whereIn: chunk)
-            .get();
+        final snapshot =
+            await _firestore
+                .collection('ITEM_LISTING')
+                .where('itemId', whereIn: chunk)
+                .get();
         for (final doc in snapshot.docs) {
-          final itemId = doc.data()['itemId']?.toString().trim().isNotEmpty == true
-              ? doc.data()['itemId'].toString().trim()
-              : doc.id;
-          listingsByItemId[itemId] = {
-            ...doc.data(),
-            '_docId': doc.id,
-          };
+          final itemId =
+              doc.data()['itemId']?.toString().trim().isNotEmpty == true
+                  ? doc.data()['itemId'].toString().trim()
+                  : doc.id;
+          listingsByItemId[itemId] = {...doc.data(), '_docId': doc.id};
         }
       }
 
-      final records = requestSnapshot.docs.map((doc) {
-        final data = doc.data();
-        final itemId = data['itemId']?.toString().trim() ?? '';
-        final itemData = listingsByItemId[itemId] ?? const <String, dynamic>{};
-        return RecipientRequestRecord(
-          requestId: data['requestId']?.toString().trim().isNotEmpty == true
-              ? data['requestId'].toString().trim()
-              : doc.id,
-          docId: doc.id,
-          itemId: itemId,
-          itemDocId: itemData['_docId']?.toString() ?? '',
-          itemTitle: itemData['title']?.toString().trim().isNotEmpty == true
-              ? itemData['title'].toString().trim()
-              : 'Community item',
-          itemCategory: itemData['category']?.toString().trim() ?? 'others',
-          itemQuantity: _readInt(itemData['quantity']),
-          availabilityStatus:
-              itemData['availabilityStatus']?.toString().trim() ?? 'available',
-          donorId: itemData['donorId']?.toString().trim() ?? '',
-          hubId: data['hubId']?.toString().trim() ?? '',
-          requestNote: data['requestNote']?.toString().trim() ?? '',
-          requestStatus: data['requestStatus']?.toString().trim() ?? 'pending',
-          requestedAt: _readDateTime(data['requestedAt']),
-          updatedAt: _readDateTime(data['updatedAt']),
-        );
-      }).toList(growable: false)
-        ..sort((a, b) {
-          final left = a.updatedAt ?? a.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final right = b.updatedAt ?? b.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-          return right.compareTo(left);
-        });
+      final records = requestSnapshot.docs
+        .map((doc) {
+          final data = doc.data();
+          final itemId = data['itemId']?.toString().trim() ?? '';
+          final itemData =
+              listingsByItemId[itemId] ?? const <String, dynamic>{};
+          return RecipientRequestRecord(
+            requestId:
+                data['requestId']?.toString().trim().isNotEmpty == true
+                    ? data['requestId'].toString().trim()
+                    : doc.id,
+            docId: doc.id,
+            itemId: itemId,
+            itemDocId: itemData['_docId']?.toString() ?? '',
+            itemTitle:
+                itemData['title']?.toString().trim().isNotEmpty == true
+                    ? itemData['title'].toString().trim()
+                    : 'Community item',
+            itemCategory: itemData['category']?.toString().trim() ?? 'others',
+            itemQuantity: _readInt(itemData['quantity']),
+            availabilityStatus:
+                itemData['availabilityStatus']?.toString().trim() ??
+                'available',
+            donorId: itemData['donorId']?.toString().trim() ?? '',
+            handoverType: data['handoverType']?.toString().trim() ?? '',
+            hubId: data['hubId']?.toString().trim() ?? '',
+            hubName: data['hubName']?.toString().trim() ?? '',
+            requestNote: data['requestNote']?.toString().trim() ?? '',
+            requestStatus:
+                data['requestStatus']?.toString().trim() ?? 'pending',
+            requestedAt: _readDateTime(data['requestedAt']),
+            updatedAt: _readDateTime(data['updatedAt']),
+          );
+        })
+        .toList(growable: false)..sort((a, b) {
+        final left =
+            a.updatedAt ??
+            a.requestedAt ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final right =
+            b.updatedAt ??
+            b.requestedAt ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return right.compareTo(left);
+      });
 
       if (!mounted) {
         return;
@@ -470,17 +487,15 @@ class _RecipientRequestStatusLauncherPageState
     }
 
     if (_errorMessage.isNotEmpty) {
-      return AppErrorState(
-        message: _errorMessage,
-        onRetry: _loadRequests,
-      );
+      return AppErrorState(message: _errorMessage, onRetry: _loadRequests);
     }
 
     if (_requests.isEmpty) {
       return const AppEmptyState(
         icon: Icons.timeline_outlined,
         title: 'No active requests',
-        message: 'Approved requests will appear here so you can track handover progress.',
+        message:
+            'Approved requests will appear here so you can track handover progress.',
       );
     }
 
@@ -496,12 +511,13 @@ class _RecipientRequestStatusLauncherPageState
               decoration: InputDecoration(
                 hintText: 'Search by item, status, or category',
                 prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () => _searchController.clear(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
+                suffixIcon:
+                    _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                          onPressed: () => _searchController.clear(),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -534,12 +550,13 @@ class _RecipientRequestStatusLauncherPageState
             decoration: InputDecoration(
               hintText: 'Search by item, status, or category',
               prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: _searchController.text.isEmpty
-                  ? null
-                  : IconButton(
-                      onPressed: () => _searchController.clear(),
-                      icon: const Icon(Icons.close_rounded),
-              ),
+              suffixIcon:
+                  _searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                        onPressed: () => _searchController.clear(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -560,11 +577,14 @@ class _RecipientRequestStatusLauncherPageState
                     '${titleCaseLabel(request.requestStatus)} • ${formatCategoryLabel(request.itemCategory)}',
                   ),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => RecipientRequestStatusPage(request: request),
-                    ),
-                  ),
+                  onTap:
+                      () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder:
+                              (_) =>
+                                  RecipientRequestStatusPage(request: request),
+                        ),
+                      ),
                 ),
               ),
             ),
@@ -575,9 +595,10 @@ class _RecipientRequestStatusLauncherPageState
             totalPages: _totalPages,
             onPrevious:
                 _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
-            onNext: _currentPage + 1 < _totalPages
-                ? () => _goToPage(_currentPage + 1)
-                : null,
+            onNext:
+                _currentPage + 1 < _totalPages
+                    ? () => _goToPage(_currentPage + 1)
+                    : null,
           ),
         ],
       ),
@@ -629,49 +650,54 @@ class _RecipientRequestStatusLauncherPageState
     String selectedStatus,
   ) {
     final normalizedQuery = query.trim().toLowerCase();
-    final active = requests.where((request) {
-      final status = request.requestStatus.toLowerCase();
-      return status == 'approved' ||
-          status == 'reserved' ||
-          status == 'delivering' ||
-          status == 'delivering_to_hub' ||
-          status == 'delivering_to_recipient' ||
-          status == 'item_at_community_hub' ||
-          status == 'completed';
-    }).toList(growable: false);
+    final active = requests
+        .where((request) {
+          final status = request.requestStatus.toLowerCase();
+          return status == 'approved' ||
+              status == 'reserved' ||
+              status == 'delivering' ||
+              status == 'delivering_to_hub' ||
+              status == 'delivering_to_recipient' ||
+              status == 'item_at_community_hub' ||
+              status == 'completed';
+        })
+        .toList(growable: false);
 
-    return active.where((request) {
-      final category = request.itemCategory.toLowerCase();
-      final status = request.requestStatus.toLowerCase();
+    return active
+        .where((request) {
+          final category = request.itemCategory.toLowerCase();
+          final status = request.requestStatus.toLowerCase();
 
-      if (selectedCategory != 'all' && category != selectedCategory) {
-        return false;
-      }
+          if (selectedCategory != 'all' && category != selectedCategory) {
+            return false;
+          }
 
-      if (selectedStatus != 'all' && status != selectedStatus) {
-        return false;
-      }
+          if (selectedStatus != 'all' && status != selectedStatus) {
+            return false;
+          }
 
-      if (normalizedQuery.isEmpty) {
-        return true;
-      }
+          if (normalizedQuery.isEmpty) {
+            return true;
+          }
 
-      return request.itemTitle.toLowerCase().contains(normalizedQuery) ||
-          request.requestStatus.toLowerCase().contains(normalizedQuery) ||
-          request.itemCategory.toLowerCase().contains(normalizedQuery) ||
-          request.itemId.toLowerCase().contains(normalizedQuery) ||
-          request.hubId.toLowerCase().contains(normalizedQuery) ||
-          request.requestNote.toLowerCase().contains(normalizedQuery);
-    }).toList(growable: false);
+          return request.itemTitle.toLowerCase().contains(normalizedQuery) ||
+              request.requestStatus.toLowerCase().contains(normalizedQuery) ||
+              request.itemCategory.toLowerCase().contains(normalizedQuery) ||
+              request.itemId.toLowerCase().contains(normalizedQuery) ||
+              request.hubId.toLowerCase().contains(normalizedQuery) ||
+              request.requestNote.toLowerCase().contains(normalizedQuery);
+        })
+        .toList(growable: false);
   }
 
   List<String> get _categories {
-    final values = _requests
-        .map((request) => request.itemCategory.trim())
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final values =
+        _requests
+            .map((request) => request.itemCategory.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return ['all', ...values];
   }
 
@@ -683,9 +709,7 @@ class _RecipientRequestStatusLauncherPageState
           children: [
             DropdownButtonFormField<String>(
               initialValue: _selectedCategory,
-              decoration: const InputDecoration(
-                labelText: 'Category',
-              ),
+              decoration: const InputDecoration(labelText: 'Category'),
               items: _categories
                   .map(
                     (option) => DropdownMenuItem<String>(
@@ -717,15 +741,16 @@ class _RecipientRequestStatusLauncherPageState
             const SizedBox(height: AppSpacing.md),
             DropdownButtonFormField<String>(
               initialValue: _selectedStatus,
-              decoration: const InputDecoration(
-                labelText: 'Status',
-              ),
+              decoration: const InputDecoration(labelText: 'Status'),
               items: const [
                 DropdownMenuItem(value: 'all', child: Text('All statuses')),
                 DropdownMenuItem(value: 'pending', child: Text('Pending')),
                 DropdownMenuItem(value: 'approved', child: Text('Approved')),
                 DropdownMenuItem(value: 'reserved', child: Text('Reserved')),
-                DropdownMenuItem(value: 'delivering', child: Text('Delivering')),
+                DropdownMenuItem(
+                  value: 'delivering',
+                  child: Text('Delivering'),
+                ),
                 DropdownMenuItem(
                   value: 'delivering_to_hub',
                   child: Text('Delivering to hub'),
@@ -867,14 +892,18 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
         throw Exception('User not authenticated');
       }
 
-      final listingSnapshot = await _firestore
-          .collection('ITEM_LISTING')
-          .where('donorId', isEqualTo: donorId)
-          .get();
+      final listingSnapshot =
+          await _firestore
+              .collection('ITEM_LISTING')
+              .where('donorId', isEqualTo: donorId)
+              .get();
       final itemIds = listingSnapshot.docs
-          .map((doc) => doc.data()['itemId']?.toString().trim().isNotEmpty == true
-              ? doc.data()['itemId'].toString().trim()
-              : doc.id)
+          .map(
+            (doc) =>
+                doc.data()['itemId']?.toString().trim().isNotEmpty == true
+                    ? doc.data()['itemId'].toString().trim()
+                    : doc.id,
+          )
           .toList(growable: false);
       if (itemIds.isEmpty) {
         if (!mounted) return;
@@ -889,17 +918,21 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
 
       final requestDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
       for (final chunk in _chunkStrings(itemIds, 10)) {
-        final snapshot = await _firestore
-            .collection('ITEM_REQUEST')
-            .where('itemId', whereIn: chunk)
-            .get();
+        final snapshot =
+            await _firestore
+                .collection('ITEM_REQUEST')
+                .where('itemId', whereIn: chunk)
+                .get();
         requestDocs.addAll(snapshot.docs);
       }
 
       final requestIds = requestDocs
-          .map((doc) => doc.data()['requestId']?.toString().trim().isNotEmpty == true
-              ? doc.data()['requestId'].toString().trim()
-              : doc.id)
+          .map(
+            (doc) =>
+                doc.data()['requestId']?.toString().trim().isNotEmpty == true
+                    ? doc.data()['requestId'].toString().trim()
+                    : doc.id,
+          )
           .toSet()
           .toList(growable: false);
       final handoversByRequestId = await _loadHandoversByRequestIds(requestIds);
@@ -919,54 +952,68 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
             .toList(growable: false),
       );
 
-      final records = requestDocs.map((doc) {
-        final data = doc.data();
-        final itemId = data['itemId']?.toString().trim() ?? '';
-        final itemData = {
-          for (final itemDoc in listingSnapshot.docs)
-            (itemDoc.data()['itemId']?.toString().trim().isNotEmpty == true
-                    ? itemDoc.data()['itemId'].toString().trim()
-                    : itemDoc.id):
-                {...itemDoc.data(), '_docId': itemDoc.id},
-        }[itemId] ?? const <String, dynamic>{};
-        final recipientId = data['recipientId']?.toString().trim() ?? '';
-        final hubId = data['hubId']?.toString().trim() ?? '';
-        final requestId = data['requestId']?.toString().trim().isNotEmpty == true
-            ? data['requestId'].toString().trim()
-            : doc.id;
-        final handoverData = handoversByRequestId[requestId] ?? const <String, dynamic>{};
+      final records = requestDocs
+        .map((doc) {
+          final data = doc.data();
+          final itemId = data['itemId']?.toString().trim() ?? '';
+          final itemData =
+              {
+                for (final itemDoc in listingSnapshot.docs)
+                  (itemDoc.data()['itemId']?.toString().trim().isNotEmpty ==
+                          true
+                      ? itemDoc.data()['itemId'].toString().trim()
+                      : itemDoc.id): {...itemDoc.data(), '_docId': itemDoc.id},
+              }[itemId] ??
+              const <String, dynamic>{};
+          final recipientId = data['recipientId']?.toString().trim() ?? '';
+          final hubId = data['hubId']?.toString().trim() ?? '';
+          final requestId =
+              data['requestId']?.toString().trim().isNotEmpty == true
+                  ? data['requestId'].toString().trim()
+                  : doc.id;
+          final handoverData =
+              handoversByRequestId[requestId] ?? const <String, dynamic>{};
 
-        return DonorIncomingRequestRecord(
-          requestId: requestId,
-          docId: doc.id,
-          itemId: itemId,
-          itemDocId: itemData['_docId']?.toString() ?? '',
-          itemTitle: itemData['title']?.toString().trim().isNotEmpty == true
-              ? itemData['title'].toString().trim()
-              : 'Community item',
-          itemPhotoUrl: itemData['photoUrl']?.toString().trim() ?? '',
-          itemCategory: itemData['category']?.toString().trim() ?? 'others',
-          itemQuantity: int.tryParse(itemData['quantity']?.toString() ?? '') ?? 1,
-          availabilityStatus:
-              itemData['availabilityStatus']?.toString().trim() ?? 'available',
-          recipientId: recipientId,
-          recipientName: _displayNameForUser(usersById[recipientId]),
-          recipientPhone: _phoneForUser(usersById[recipientId]),
-          recipientLocation: _locationForUser(usersById[recipientId]),
-          hubId: hubId,
-          hubName: _displayNameForHub(hubsById[hubId], hubId),
-          requestNote: data['requestNote']?.toString().trim() ?? '',
-          requestStatus: data['requestStatus']?.toString().trim() ?? 'pending',
-          handoverStatus: handoverData['handoverStatus']?.toString().trim() ?? '',
-          requestedAt: _readDateTime(data['requestedAt']),
-          updatedAt: _readDateTime(data['updatedAt']),
-        );
-      }).toList(growable: false)
-        ..sort((a, b) {
-          final left = a.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final right = b.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-          return right.compareTo(left);
-        });
+          return DonorIncomingRequestRecord(
+            requestId: requestId,
+            docId: doc.id,
+            itemId: itemId,
+            itemDocId: itemData['_docId']?.toString() ?? '',
+            itemTitle:
+                itemData['title']?.toString().trim().isNotEmpty == true
+                    ? itemData['title'].toString().trim()
+                    : 'Community item',
+            itemPhotoUrl: itemData['photoUrl']?.toString().trim() ?? '',
+            itemCategory: itemData['category']?.toString().trim() ?? 'others',
+            itemQuantity:
+                int.tryParse(itemData['quantity']?.toString() ?? '') ?? 1,
+            availabilityStatus:
+                itemData['availabilityStatus']?.toString().trim() ??
+                'available',
+            recipientId: recipientId,
+            recipientName: _displayNameForUser(usersById[recipientId]),
+            recipientPhone: _phoneForUser(usersById[recipientId]),
+            recipientLocation: _locationForUser(usersById[recipientId]),
+            handoverType: data['handoverType']?.toString().trim() ?? '',
+            hubId: hubId,
+            hubName:
+                data['hubName']?.toString().trim().isNotEmpty == true
+                    ? data['hubName'].toString().trim()
+                    : _displayNameForHub(hubsById[hubId], hubId),
+            requestNote: data['requestNote']?.toString().trim() ?? '',
+            requestStatus:
+                data['requestStatus']?.toString().trim() ?? 'pending',
+            handoverStatus:
+                handoverData['handoverStatus']?.toString().trim() ?? '',
+            requestedAt: _readDateTime(data['requestedAt']),
+            updatedAt: _readDateTime(data['updatedAt']),
+          );
+        })
+        .toList(growable: false)..sort((a, b) {
+        final left = a.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final right = b.requestedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return right.compareTo(left);
+      });
 
       if (!mounted) return;
       setState(() {
@@ -1079,11 +1126,12 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
                       '${titleCaseLabel(request.requestStatus)} - ${request.recipientName}',
                     ),
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => widget.builder(request: request),
-                      ),
-                    ),
+                    onTap:
+                        () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => widget.builder(request: request),
+                          ),
+                        ),
                   ),
                 ),
               ),
@@ -1094,9 +1142,10 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
               totalPages: _totalPages,
               onPrevious:
                   _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
-              onNext: _currentPage + 1 < _totalPages
-                  ? () => _goToPage(_currentPage + 1)
-                  : null,
+              onNext:
+                  _currentPage + 1 < _totalPages
+                      ? () => _goToPage(_currentPage + 1)
+                      : null,
             ),
           ],
         ),
@@ -1120,10 +1169,7 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
     for (final id in ids) {
       final usersDoc = await _firestore.collection('USER').doc(id).get();
       final userDoc = await _firestore.collection('USER').doc(id).get();
-      result[id] = {
-        ...?usersDoc.data(),
-        ...?userDoc.data(),
-      };
+      result[id] = {...?usersDoc.data(), ...?userDoc.data()};
     }
     return result;
   }
@@ -1133,17 +1179,15 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
   ) async {
     final result = <String, Map<String, dynamic>>{};
     for (final chunk in _chunkStrings(requestIds, 10)) {
-      final snapshot = await _firestore
-          .collection('HANDOVER')
-          .where('requestId', whereIn: chunk)
-          .get();
+      final snapshot =
+          await _firestore
+              .collection('HANDOVER')
+              .where('requestId', whereIn: chunk)
+              .get();
       for (final doc in snapshot.docs) {
         final requestId = doc.data()['requestId']?.toString().trim() ?? '';
         if (requestId.isNotEmpty) {
-          result[requestId] = {
-            ...doc.data(),
-            '_docId': doc.id,
-          };
+          result[requestId] = {...doc.data(), '_docId': doc.id};
         }
       }
     }
@@ -1169,48 +1213,53 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
     String selectedHandoverStage,
   ) {
     final normalizedQuery = query.trim().toLowerCase();
-    return requests.where((request) {
-      final status = request.requestStatus.toLowerCase();
-      final handoverStage = _effectiveHandoverStage(request);
-      final isTracking = widget.title == 'Donation Tracking';
-      final isEligible = isTracking
-          ? status == 'approved' ||
-              status == 'delivering' ||
-              status == 'delivering_to_hub' ||
-              status == 'delivering_to_recipient' ||
-              status == 'item_at_community_hub' ||
-              status == 'completed'
-          : status == 'approved' ||
-              status == 'delivering' ||
-              status == 'delivering_to_hub' ||
-              status == 'delivering_to_recipient' ||
-              status == 'item_at_community_hub';
-      if (!isEligible) {
-        return false;
-      }
+    return requests
+        .where((request) {
+          final status = request.requestStatus.toLowerCase();
+          final handoverStage = _effectiveHandoverStage(request);
+          final isTracking = widget.title == 'Donation Tracking';
+          final isEligible =
+              isTracking
+                  ? status == 'approved' ||
+                      status == 'delivering' ||
+                      status == 'delivering_to_hub' ||
+                      status == 'delivering_to_recipient' ||
+                      status == 'item_at_community_hub' ||
+                      status == 'completed'
+                  : status == 'approved' ||
+                      status == 'delivering' ||
+                      status == 'delivering_to_hub' ||
+                      status == 'delivering_to_recipient' ||
+                      status == 'item_at_community_hub';
+          if (!isEligible) {
+            return false;
+          }
 
-      if (selectedRequestStatus != 'all' && status != selectedRequestStatus) {
-        return false;
-      }
+          if (selectedRequestStatus != 'all' &&
+              status != selectedRequestStatus) {
+            return false;
+          }
 
-      if (selectedHandoverStage != 'all' && handoverStage != selectedHandoverStage) {
-        return false;
-      }
+          if (selectedHandoverStage != 'all' &&
+              handoverStage != selectedHandoverStage) {
+            return false;
+          }
 
-      if (normalizedQuery.isEmpty) {
-        return true;
-      }
+          if (normalizedQuery.isEmpty) {
+            return true;
+          }
 
-      return request.itemTitle.toLowerCase().contains(normalizedQuery) ||
-          request.recipientName.toLowerCase().contains(normalizedQuery) ||
-          request.requestNote.toLowerCase().contains(normalizedQuery) ||
-          request.requestStatus.toLowerCase().contains(normalizedQuery) ||
-          request.itemCategory.toLowerCase().contains(normalizedQuery) ||
-          request.hubName.toLowerCase().contains(normalizedQuery) ||
-          request.itemId.toLowerCase().contains(normalizedQuery) ||
-          request.recipientId.toLowerCase().contains(normalizedQuery) ||
-          request.hubId.toLowerCase().contains(normalizedQuery);
-    }).toList(growable: false);
+          return request.itemTitle.toLowerCase().contains(normalizedQuery) ||
+              request.recipientName.toLowerCase().contains(normalizedQuery) ||
+              request.requestNote.toLowerCase().contains(normalizedQuery) ||
+              request.requestStatus.toLowerCase().contains(normalizedQuery) ||
+              request.itemCategory.toLowerCase().contains(normalizedQuery) ||
+              request.hubName.toLowerCase().contains(normalizedQuery) ||
+              request.itemId.toLowerCase().contains(normalizedQuery) ||
+              request.recipientId.toLowerCase().contains(normalizedQuery) ||
+              request.hubId.toLowerCase().contains(normalizedQuery);
+        })
+        .toList(growable: false);
   }
 
   String _effectiveHandoverStage(DonorIncomingRequestRecord request) {
@@ -1241,15 +1290,17 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
           controller: _searchController,
           decoration: InputDecoration(
             prefixIcon: const Icon(Icons.search_rounded),
-            suffixIcon: _searchController.text.isEmpty
-                ? null
-                : IconButton(
-                    onPressed: () => _searchController.clear(),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-            hintText: widget.title == 'Donation Tracking'
-                ? 'Search tracked requests'
-                : 'Search handover requests',
+            suffixIcon:
+                _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                      onPressed: () => _searchController.clear(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+            hintText:
+                widget.title == 'Donation Tracking'
+                    ? 'Search tracked requests'
+                    : 'Search handover requests',
           ),
         ),
         if (showStatusFilters) ...[
@@ -1257,16 +1308,20 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
           Row(
             children: [
               Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: _selectedRequestStatus,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Status',
-                ),
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedRequestStatus,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Status'),
                   items: const [
                     DropdownMenuItem(value: 'all', child: Text('All statuses')),
-                    DropdownMenuItem(value: 'approved', child: Text('Approved')),
-                    DropdownMenuItem(value: 'delivering', child: Text('Delivering')),
+                    DropdownMenuItem(
+                      value: 'approved',
+                      child: Text('Approved'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'delivering',
+                      child: Text('Delivering'),
+                    ),
                     DropdownMenuItem(
                       value: 'delivering_to_hub',
                       child: Text('Delivering to hub'),
@@ -1279,7 +1334,10 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
                       value: 'delivering_to_recipient',
                       child: Text('Delivering to recipient'),
                     ),
-                    DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                    DropdownMenuItem(
+                      value: 'completed',
+                      child: Text('Completed'),
+                    ),
                   ],
                   onChanged: (value) {
                     if (value == null) return;
@@ -1298,16 +1356,22 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: _selectedHandoverStage,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Handover stage',
-                ),
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedHandoverStage,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Handover stage',
+                  ),
                   items: const [
                     DropdownMenuItem(value: 'all', child: Text('All stages')),
-                    DropdownMenuItem(value: 'approved', child: Text('Approved')),
-                    DropdownMenuItem(value: 'delivering', child: Text('Delivering')),
+                    DropdownMenuItem(
+                      value: 'approved',
+                      child: Text('Approved'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'delivering',
+                      child: Text('Delivering'),
+                    ),
                     DropdownMenuItem(
                       value: 'delivering_to_hub',
                       child: Text('Delivering to hub'),
@@ -1320,7 +1384,10 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
                       value: 'delivering_to_recipient',
                       child: Text('Delivering to recipient'),
                     ),
-                    DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                    DropdownMenuItem(
+                      value: 'completed',
+                      child: Text('Completed'),
+                    ),
                   ],
                   onChanged: (value) {
                     if (value == null) return;
@@ -1389,7 +1456,8 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
     if (phone.isNotEmpty) return phone;
     final phoneCode = data['phoneCountryCode']?.toString().trim() ?? '';
     final localPhone = data['phoneLocalNumber']?.toString().trim() ?? '';
-    final combined = [phoneCode, localPhone].where((v) => v.isNotEmpty).join(' ').trim();
+    final combined =
+        [phoneCode, localPhone].where((v) => v.isNotEmpty).join(' ').trim();
     return combined.isNotEmpty ? combined : 'Phone not provided';
   }
 
@@ -1456,10 +1524,7 @@ class _PaginationBar extends StatelessWidget {
 }
 
 class _HeaderPill extends StatelessWidget {
-  const _HeaderPill({
-    required this.icon,
-    required this.label,
-  });
+  const _HeaderPill({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -1496,4 +1561,3 @@ class _HeaderPill extends StatelessWidget {
     );
   }
 }
-

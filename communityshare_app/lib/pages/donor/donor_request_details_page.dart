@@ -12,15 +12,13 @@ import 'donor_select_handover_point_page.dart';
 import '../../utils/image_utils.dart';
 
 class DonorRequestDetailsPage extends StatefulWidget {
-  const DonorRequestDetailsPage({
-    super.key,
-    required this.request,
-  });
+  const DonorRequestDetailsPage({super.key, required this.request});
 
   final DonorIncomingRequestRecord request;
 
   @override
-  State<DonorRequestDetailsPage> createState() => _DonorRequestDetailsPageState();
+  State<DonorRequestDetailsPage> createState() =>
+      _DonorRequestDetailsPageState();
 }
 
 class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
@@ -52,7 +50,9 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
     try {
       final request = widget.request;
       final batch = _firestore.batch();
-      final requestRef = _firestore.collection('ITEM_REQUEST').doc(request.docId);
+      final requestRef = _firestore
+          .collection('ITEM_REQUEST')
+          .doc(request.docId);
 
       batch.update(requestRef, {
         'requestStatus': nextStatus,
@@ -60,15 +60,20 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
       });
 
       if (request.itemDocId.isNotEmpty) {
-        final itemRef = _firestore.collection('ITEM_LISTING').doc(request.itemDocId);
+        final itemRef = _firestore
+            .collection('ITEM_LISTING')
+            .doc(request.itemDocId);
         batch.update(itemRef, {
-          'availabilityStatus': nextStatus == 'approved' ? 'reserved' : 'available',
+          'availabilityStatus':
+              nextStatus == 'approved' ? 'reserved' : 'available',
         });
       }
 
       if (nextStatus == 'approved') {
         final historyId = _newHistoryId();
-        final historyRef = _firestore.collection('DONATION_STATUS_HISTORY').doc(historyId);
+        final historyRef = _firestore
+            .collection('DONATION_STATUS_HISTORY')
+            .doc(historyId);
         batch.set(historyRef, {
           'statusHistoryId': historyId,
           'requestId': request.requestId,
@@ -79,11 +84,12 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
       }
 
       if (nextStatus == 'approved') {
-        final relatedSnapshot = await _firestore
-            .collection('ITEM_REQUEST')
-            .where('itemId', isEqualTo: request.itemId)
-            .where('requestStatus', isEqualTo: 'pending')
-            .get();
+        final relatedSnapshot =
+            await _firestore
+                .collection('ITEM_REQUEST')
+                .where('itemId', isEqualTo: request.itemId)
+                .where('requestStatus', isEqualTo: 'pending')
+                .get();
 
         for (final doc in relatedSnapshot.docs) {
           if (doc.id == request.docId) {
@@ -94,7 +100,6 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
             'requestStatus': 'rejected',
             'updatedAt': FieldValue.serverTimestamp(),
           });
-
         }
       }
 
@@ -106,7 +111,8 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
 
       setState(() {
         _requestStatus = nextStatus;
-        _availabilityStatus = nextStatus == 'approved' ? 'reserved' : 'available';
+        _availabilityStatus =
+            nextStatus == 'approved' ? 'reserved' : 'available';
         _isUpdating = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -138,9 +144,7 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
     final canSelectHandover = _canSelectHandover(_requestStatus);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Request Details'),
-      ),
+      appBar: AppBar(title: const Text('Request Details')),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
@@ -155,13 +159,14 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
                     child: SizedBox(
                       width: 88,
                       height: 88,
-                      child: request.itemPhotoUrl.isNotEmpty
-                          ? ImageUtils.base64ToImage(
-                              request.itemPhotoUrl,
-                              fit: BoxFit.cover,
-                              errorWidget: _itemImageFallback(),
-                            )
-                          : _itemImageFallback(),
+                      child:
+                          request.itemPhotoUrl.isNotEmpty
+                              ? ImageUtils.base64ToImage(
+                                request.itemPhotoUrl,
+                                fit: BoxFit.cover,
+                                errorWidget: _itemImageFallback(),
+                              )
+                              : _itemImageFallback(),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.md),
@@ -171,9 +176,7 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
                       children: [
                         Text(
                           request.itemTitle,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
+                          style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: AppSpacing.xs),
@@ -212,16 +215,30 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
                 children: [
                   Text(
                     'Request Summary',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _InfoRow(label: 'Recipient', value: request.recipientName),
                   _InfoRow(label: 'Phone', value: request.recipientPhone),
                   _InfoRow(label: 'Location', value: request.recipientLocation),
-                  _InfoRow(label: 'Hub', value: request.hubName),
+                  _InfoRow(
+                    label: 'Selected Method',
+                    value:
+                        request.handoverType.isNotEmpty
+                            ? titleCaseLabel(request.handoverType)
+                            : 'Not selected',
+                  ),
+                  if (request.handoverType == 'community_hub_pickup')
+                    _InfoRow(label: 'Community Hub', value: request.hubName),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    request.handoverType == 'community_hub_pickup'
+                        ? 'The recipient chose community hub pickup for this request.'
+                        : 'The recipient chose independent pickup for this request.',
+                    style: const TextStyle(color: AppColors.mist, height: 1.5),
+                  ),
                   _InfoRow(
                     label: 'Requested',
                     value: _formatDateTime(request.requestedAt),
@@ -249,10 +266,9 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
                   children: [
                     Text(
                       'Request Note',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
@@ -276,22 +292,23 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
                 children: [
                   Text(
                     'Next Actions',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => DonorDonationStatusTrackingPage(
-                            request: request,
+                      onPressed:
+                          () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder:
+                                  (_) => DonorDonationStatusTrackingPage(
+                                    request: request,
+                                  ),
+                            ),
                           ),
-                        ),
-                      ),
                       icon: const Icon(Icons.timeline_outlined),
                       label: const Text('Open Donation Status Tracking'),
                     ),
@@ -300,25 +317,37 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      onPressed: canSelectHandover
-                          ? () => Navigator.of(context).push(
+                      onPressed:
+                          canSelectHandover
+                              ? () => Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) =>
-                                      DonorSelectHandoverPointPage(
-                                    request: request,
-                                  ),
+                                  builder:
+                                      (_) => DonorSelectHandoverPointPage(
+                                        request: request,
+                                      ),
                                 ),
                               )
-                          : null,
+                              : null,
                       icon: const Icon(Icons.location_on_outlined),
-                      label: const Text('Select Handover Point'),
+                      label: const Text('Confirm Handover Method'),
                     ),
                   ),
                   if (!canSelectHandover) ...[
                     const SizedBox(height: AppSpacing.sm),
                     const Text(
-                      'Approve the request first before assigning a handover point.',
+                      'Approve the request first before confirming the selected handover method.',
                       style: TextStyle(color: AppColors.mist),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      request.handoverType == 'community_hub_pickup'
+                          ? 'Approve, or reject if you do not want to use the donor-configured community hub.'
+                          : 'Approve, or reject if you do not want to continue with independent pickup.',
+                      style: const TextStyle(
+                        color: AppColors.mist,
+                        height: 1.5,
+                      ),
                     ),
                   ],
                 ],
@@ -327,56 +356,60 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
           ),
         ],
       ),
-      bottomNavigationBar: canDecide
-          ? SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.sm,
-                  AppSpacing.lg,
-                  AppSpacing.lg,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _isUpdating
-                            ? null
-                            : () => _updateRequestStatus('rejected'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.coral,
-                          side: const BorderSide(color: AppColors.coral),
-                          padding: const EdgeInsets.symmetric(
-                            vertical: AppSpacing.md,
+      bottomNavigationBar:
+          canDecide
+              ? SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.sm,
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed:
+                              _isUpdating
+                                  ? null
+                                  : () => _updateRequestStatus('rejected'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.coral,
+                            side: const BorderSide(color: AppColors.coral),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.md,
+                            ),
                           ),
+                          child: const Text('Reject'),
                         ),
-                        child: const Text('Reject'),
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _isUpdating
-                            ? null
-                            : () => _updateRequestStatus('approved'),
-                        child: _isUpdating
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.night,
-                                ),
-                              )
-                            : const Text('Approve'),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed:
+                              _isUpdating
+                                  ? null
+                                  : () => _updateRequestStatus('approved'),
+                          child:
+                              _isUpdating
+                                  ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.night,
+                                    ),
+                                  )
+                                  : const Text('Approve'),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            )
-          : null,
+              )
+              : null,
     );
   }
 
@@ -420,10 +453,7 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
+  const _InfoRow({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -446,10 +476,7 @@ class _InfoRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(color: AppColors.mist),
-            ),
+            child: Text(value, style: const TextStyle(color: AppColors.mist)),
           ),
         ],
       ),
@@ -458,10 +485,7 @@ class _InfoRow extends StatelessWidget {
 }
 
 class _RequestChip extends StatelessWidget {
-  const _RequestChip({
-    required this.label,
-    required this.color,
-  });
+  const _RequestChip({required this.label, required this.color});
 
   final String label;
   final Color color;

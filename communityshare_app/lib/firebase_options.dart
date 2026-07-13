@@ -46,7 +46,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '818439486670',
     projectId: 'communityshare-bf874',
     authDomain: 'communityshare-bf874.firebaseapp.com',
-    storageBucket: 'communityshare-bf874.firebasestorage.app',
+    storageBucket: 'gs://communityshare-bf874.firebasestorage.app',
     measurementId: 'G-ENKLHJLKNY',
   );
 
@@ -55,7 +55,7 @@ class DefaultFirebaseOptions {
     appId: '1:750092666085:android:1a33afe6a6819d4690800c',
     messagingSenderId: '750092666085',
     projectId: 'communityshare-bf874',
-    storageBucket: 'communityshare-bf874.firebasestorage.app',
+    storageBucket: 'gs://communityshare-bf874.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
@@ -63,7 +63,7 @@ class DefaultFirebaseOptions {
     appId: '1:818439486670:ios:2de7d381918ddfed0be49f',
     messagingSenderId: '818439486670',
     projectId: 'communityshare-bf874',
-    storageBucket: 'communityshare-bf874.firebasestorage.app',
+    storageBucket: 'gs://communityshare-bf874.firebasestorage.app',
     iosBundleId: 'com.example.communityShareApp',
   );
 
@@ -72,7 +72,7 @@ class DefaultFirebaseOptions {
     appId: '1:818439486670:ios:2de7d381918ddfed0be49f',
     messagingSenderId: '818439486670',
     projectId: 'communityshare-bf874',
-    storageBucket: 'communityshare-bf874.firebasestorage.app',
+    storageBucket: 'gs://communityshare-bf874.firebasestorage.app',
     iosBundleId: 'com.example.communityShareApp',
   );
 
@@ -82,7 +82,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '818439486670',
     projectId: 'communityshare-bf874',
     authDomain: 'communityshare-bf874.firebaseapp.com',
-    storageBucket: 'communityshare-bf874.firebasestorage.app',
+    storageBucket: 'gs://communityshare-bf874.firebasestorage.app',
     measurementId: 'G-LJMP8EVBVV',
   );
 }

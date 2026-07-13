@@ -3,14 +3,14 @@
     "platforms": {
       "android": {
         "default": {
-          "projectId": "your-project-id",
+          "projectId": "communityshare-bf874",
           "appId": "1:123456789012:android:abcdef123456abcdef1234",
           "fileOutput": "android/app/google-services.json"
         }
       },
       "dart": {
         "lib/firebase_options.dart": {
-          "projectId": "your-project-id",
+          "projectId": "communityshare-bf874",
           "configurations": {
             "android": "1:123456789012:android:abcdef123456abcdef1234",
             "ios": "1:123456789012:ios:abcdef123456abcdef1234",
