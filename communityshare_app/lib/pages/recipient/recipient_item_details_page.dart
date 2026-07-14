@@ -697,83 +697,79 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                 }
               }
 
-              return Container(
-                decoration: BoxDecoration(
-                  color: AppColors.coral.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(color: AppColors.coral),
-                ),
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Report ${widget.item.title}',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.coral,
-                        ),
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Report ${widget.item.title}',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.coral,
                       ),
-                      const SizedBox(height: AppSpacing.sm),
-                      const Text(
-                        'Tell us why this listing is offensive, harmful, or inappropriate.',
-                        style: TextStyle(color: AppColors.mist, height: 1.5),
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                      TextField(
-                        controller: _reportReasonController,
-                        maxLines: 5,
-                        maxLength: 300,
-                        decoration: InputDecoration(
-                          labelText: 'Reason for report',
-                          hintText: 'Type the reason for this report.',
-                          fillColor: AppColors.night,
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.sm),
-                            borderSide: BorderSide(
-                              color: AppColors.coral.withValues(alpha: 0.45),
-                            ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    const Text(
+                      'Tell us why this listing is offensive, harmful, or inappropriate.',
+                      style: TextStyle(color: AppColors.mist, height: 1.5),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    TextField(
+                      controller: _reportReasonController,
+                      maxLines: 5,
+                      maxLength: 300,
+                      decoration: InputDecoration(
+                        labelText: 'Reason for report',
+                        hintText: 'Type the reason for this report.',
+                        fillColor: AppColors.night,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(
+                            AppRadius.sm,
                           ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.sm),
-                            borderSide: const BorderSide(
-                              color: AppColors.coral,
-                              width: 1.4,
-                            ),
+                          borderSide: BorderSide(
+                            color: AppColors.coral.withValues(alpha: 0.28),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(
+                            AppRadius.sm,
+                          ),
+                          borderSide: const BorderSide(
+                            color: AppColors.coral,
+                            width: 1.2,
                           ),
                         ),
                       ),
-                      const SizedBox(height: AppSpacing.md),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _isSubmittingReport ? null : submit,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.coral,
-                            foregroundColor: AppColors.white,
-                          ),
-                          icon:
-                              _isSubmittingReport
-                                  ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppColors.white,
-                                    ),
-                                  )
-                                  : const Icon(Icons.flag_outlined),
-                          label: Text(
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _isSubmittingReport ? null : submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.coral,
+                          foregroundColor: AppColors.white,
+                        ),
+                        icon:
                             _isSubmittingReport
-                                ? 'Submitting report...'
-                                : 'Submit report',
-                          ),
+                                ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.white,
+                                  ),
+                                )
+                                : const Icon(Icons.flag_outlined),
+                        label: Text(
+                          _isSubmittingReport
+                              ? 'Submitting report...'
+                              : 'Submit report',
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               );
             },

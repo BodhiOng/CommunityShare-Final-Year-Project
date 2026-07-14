@@ -31,6 +31,7 @@ class _DonorSelectHandoverPointPageState
   String? _selectedHubId;
   String _handoverType = 'community_hub_pickup';
   String _requestStatus = '';
+  String _handoverStatus = '';
   String? _handoverDocId;
 
   @override
@@ -97,6 +98,7 @@ class _DonorSelectHandoverPointPageState
         _requestStatus =
             requestData['requestStatus']?.toString().trim() ??
             widget.request.requestStatus;
+        _handoverStatus = handoverData['handoverStatus']?.toString().trim() ?? '';
         _handoverDocId = handoverDoc?.id;
         _handoverType = resolvedHandoverType;
         _selectedHubId =
@@ -124,6 +126,15 @@ class _DonorSelectHandoverPointPageState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('You need to sign in before saving a handover.'),
+        ),
+      );
+      return;
+    }
+
+    if (!_canSaveHandover()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This handover can no longer be changed.'),
         ),
       );
       return;
@@ -213,6 +224,8 @@ class _DonorSelectHandoverPointPageState
       setState(() {
         _handoverDocId = handoverId;
         _isEditing = true;
+        _handoverStatus = deliveryStatus;
+        _requestStatus = deliveryStatus;
         _isSaving = false;
       });
       Navigator.of(context).pop(true);
@@ -235,6 +248,15 @@ class _DonorSelectHandoverPointPageState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('You need to sign in before canceling a handover.'),
+        ),
+      );
+      return;
+    }
+
+    if (!_canCancelHandover()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This handover can no longer be canceled.'),
         ),
       );
       return;
@@ -353,6 +375,12 @@ class _DonorSelectHandoverPointPageState
       );
     }
 
+    final canCancelHandover = _canCancelHandover();
+    final canSaveHandover =
+        _canSaveHandover() &&
+        !(_handoverType == 'community_hub_pickup' &&
+            (_selectedHubId == null || _selectedHubId!.isEmpty));
+
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 0,
@@ -400,7 +428,8 @@ class _DonorSelectHandoverPointPageState
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _isSaving ? null : _cancelHandover,
+                  onPressed:
+                      _isSaving || !canCancelHandover ? null : _cancelHandover,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.coral,
                     side: const BorderSide(color: AppColors.coral),
@@ -417,13 +446,7 @@ class _DonorSelectHandoverPointPageState
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: ElevatedButton(
-                  onPressed:
-                      _isSaving ||
-                              (_handoverType == 'community_hub_pickup' &&
-                                  (_selectedHubId == null ||
-                                      _selectedHubId!.isEmpty))
-                          ? null
-                          : _saveHandover,
+                  onPressed: _isSaving || !canSaveHandover ? null : _saveHandover,
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(52),
                     shape: RoundedRectangleBorder(
@@ -485,6 +508,36 @@ class _DonorSelectHandoverPointPageState
     }
 
     return snapshot.docs.first.reference;
+  }
+
+  bool _isIndependentClaimed() {
+    return _handoverType == 'independent_pickup' &&
+        (_requestStatus.toLowerCase() == 'completed' ||
+            _handoverStatus.toLowerCase() == 'completed');
+  }
+
+  bool _hasHubReceivedItem() {
+    return _handoverType == 'community_hub_pickup' &&
+        (_handoverStatus.toLowerCase() == 'item_at_community_hub' ||
+            _handoverStatus.toLowerCase() == 'completed' ||
+            _requestStatus.toLowerCase() == 'completed');
+  }
+
+  bool _canCancelHandover() {
+    if (_isIndependentClaimed()) {
+      return false;
+    }
+    if (_hasHubReceivedItem()) {
+      return false;
+    }
+    return true;
+  }
+
+  bool _canSaveHandover() {
+    if (_isIndependentClaimed()) {
+      return false;
+    }
+    return true;
   }
 }
 

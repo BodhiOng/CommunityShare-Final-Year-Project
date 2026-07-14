@@ -32,26 +32,16 @@ exports.registerUser = onCall(async (request) => {
   const password = requiredString(data.password, "password");
   const fullName = requiredString(data.fullName, "fullName");
   const role = normalizePublicRole(data.role);
+  const status = "inactive";
   const phoneNumber = optionalString(data.phoneNumber);
   const recipientType = optionalString(data.recipientType);
-  const hubDetails = normalizeHubDetails(data.hubDetails || {}, "active");
+  const hubDetails = normalizeHubDetails(data.hubDetails || {}, status);
 
   if (password.length < 6) {
     throw new HttpsError(
       "invalid-argument",
       "Password must be at least 6 characters long.",
     );
-  }
-
-  if (role === "recipient" && !recipientType) {
-    throw new HttpsError(
-      "invalid-argument",
-      "recipientType is required for recipient users.",
-    );
-  }
-
-  if (role === "hub") {
-    validateHubDetails(hubDetails, {requireHubId: false});
   }
 
   const createdUser = await auth.createUser({
@@ -68,7 +58,7 @@ exports.registerUser = onCall(async (request) => {
       email,
       phoneNumber,
       role,
-      status: "active",
+      status,
       recipientType,
       hubDetails,
     });
@@ -80,7 +70,7 @@ exports.registerUser = onCall(async (request) => {
   return {
     userId: createdUser.uid,
     role,
-    status: "active",
+    status,
   };
 });
 
@@ -541,16 +531,10 @@ function validateHubDetails(hubDetails, options = {}) {
   if (requireHubId && !hubDetails.hubId) {
     throw new HttpsError("invalid-argument", "hubId is required for hub users.");
   }
-  if (!hubDetails.hubName) {
+  if (options.requireHubName !== false && !hubDetails.hubName) {
     throw new HttpsError(
       "invalid-argument",
       "hubName is required for hub users.",
-    );
-  }
-  if (!hubDetails.address) {
-    throw new HttpsError(
-      "invalid-argument",
-      "address is required for hub users.",
     );
   }
 }

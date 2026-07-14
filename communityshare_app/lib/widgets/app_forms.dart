@@ -10,6 +10,8 @@ class AppTextField extends StatelessWidget {
     this.hint,
     this.obscureText = false,
     this.keyboardType,
+    this.readOnly = false,
+    this.onTap,
     this.prefixIcon,
     this.suffixIcon,
     this.validator,
@@ -20,6 +22,8 @@ class AppTextField extends StatelessWidget {
   final String? hint;
   final bool obscureText;
   final TextInputType? keyboardType;
+  final bool readOnly;
+  final VoidCallback? onTap;
   final Widget? prefixIcon;
   final Widget? suffixIcon;
   final FormFieldValidator<String>? validator;
@@ -30,6 +34,8 @@ class AppTextField extends StatelessWidget {
       controller: controller,
       obscureText: obscureText,
       keyboardType: keyboardType,
+      readOnly: readOnly,
+      onTap: onTap,
       validator: validator,
       style: const TextStyle(color: AppColors.white),
       decoration: InputDecoration(

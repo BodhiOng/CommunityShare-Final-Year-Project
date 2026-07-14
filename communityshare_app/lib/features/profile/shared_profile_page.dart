@@ -18,11 +18,18 @@ import '../../widgets/state_widgets.dart';
 import '../../utils/image_converter.dart';
 import '../../utils/image_utils.dart';
 
+const List<String> _weekdayOptions = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+];
+
 class SharedProfilePage extends StatefulWidget {
-  const SharedProfilePage({
-    super.key,
-    required this.role,
-  });
+  const SharedProfilePage({super.key, required this.role});
 
   final UserRole role;
 
@@ -43,11 +50,20 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _bioController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
   final TextEditingController _phoneCountryCodeController =
       TextEditingController();
-  final TextEditingController _countryController = TextEditingController();
-  final TextEditingController _stateController = TextEditingController();
-  final TextEditingController _cityController = TextEditingController();
+  final TextEditingController _hubContactCountryCodeController =
+      TextEditingController();
+  final TextEditingController _hubNameController = TextEditingController();
+  final TextEditingController _hubOperatingHoursController =
+      TextEditingController();
+  final TextEditingController _hubOperatingStartTimeController =
+      TextEditingController();
+  final TextEditingController _hubOperatingEndTimeController =
+      TextEditingController();
+  final TextEditingController _hubContactNumberController =
+      TextEditingController();
 
   bool _isLoading = true;
   bool _isSavingProfile = false;
@@ -58,6 +74,8 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
   String _profileImageUrl = '';
   File? _profileImageFile;
   String _status = 'active';
+  String _hubDocId = '';
+  String _hubId = '';
   DateTime? _createdAt;
   List<_CountryOption> _countryOptions = const [];
   List<String> _stateOptions = const [];
@@ -70,6 +88,12 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
   String _pendingState = '';
   String _pendingCity = '';
   String _pendingPhoneCountryCode = '';
+  String _pendingHubContactNumber = '';
+  String _legacyHubOperatingHours = '';
+  String _hubOperatingStartDay = '';
+  String _hubOperatingEndDay = '';
+  TimeOfDay? _hubOperatingStartTime;
+  TimeOfDay? _hubOperatingEndTime;
 
   @override
   void initState() {
@@ -83,18 +107,19 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     _fullNameController.dispose();
     _phoneController.dispose();
     _bioController.dispose();
+    _addressController.dispose();
     _phoneCountryCodeController.dispose();
-    _countryController.dispose();
-    _stateController.dispose();
-    _cityController.dispose();
+    _hubContactCountryCodeController.dispose();
+    _hubNameController.dispose();
+    _hubOperatingHoursController.dispose();
+    _hubOperatingStartTimeController.dispose();
+    _hubOperatingEndTimeController.dispose();
+    _hubContactNumberController.dispose();
     super.dispose();
   }
 
   Future<void> _bootstrapProfile() async {
-    await Future.wait([
-      _loadLocationData(),
-      _loadProfile(),
-    ]);
+    await Future.wait([_loadLocationData(), _loadProfile()]);
     if (mounted) {
       setState(() {
         _isLoading = false;
@@ -149,21 +174,28 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     try {
       final userDoc = await _firestore.collection('USER').doc(user.uid).get();
       final legacyDoc = await _firestore.collection('USER').doc(user.uid).get();
+      final hubDoc =
+          await _firestore.collection('COMMUNITY_HUB').doc(user.uid).get();
 
-      final data = <String, dynamic>{
-        ...?legacyDoc.data(),
-        ...?userDoc.data(),
-      };
+      final data = <String, dynamic>{...?legacyDoc.data(), ...?userDoc.data()};
+      final hubData = hubDoc.data() ?? const <String, dynamic>{};
 
       _fullNameController.text = _stringValue(
         data['fullName'],
-        fallback: _stringValue(data['username'], fallback: user.displayName ?? ''),
+        fallback: _stringValue(
+          data['username'],
+          fallback: user.displayName ?? '',
+        ),
       );
       _phoneController.text = _stringValue(
         data['phoneNumber'],
         fallback: _stringValue(data['phone']),
       );
       _bioController.text = _stringValue(data['bio']);
+      _addressController.text = _stringValue(
+        data['address'],
+        fallback: _stringValue(hubData['address']),
+      );
       _pendingCountry = _stringValue(data['country']);
       _pendingState = _stringValue(data['state']);
       _pendingCity = _stringValue(data['city']);
@@ -172,15 +204,36 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         _phoneController.text,
         _pendingPhoneCountryCode,
       );
+      _pendingHubContactNumber = _stringValue(
+        hubData['contactNumber'],
+        fallback:
+            '${_stringValue(hubData['contactCountryCode'])}${_stringValue(hubData['contactLocalNumber'])}',
+      );
+      _legacyHubOperatingHours = _stringValue(hubData['operatingHours']);
+      _hubOperatingStartDay = _stringValue(hubData['operatingStartDay']);
+      _hubOperatingEndDay = _stringValue(hubData['operatingEndDay']);
+      _hubOperatingStartTime = _readTimeOfDay(hubData['operatingStartTime']);
+      _hubOperatingEndTime = _readTimeOfDay(hubData['operatingEndTime']);
       _status = _stringValue(data['status'], fallback: 'active');
       _profileImageUrl = _stringValue(data['profileImageUrl']);
       _createdAt = _readDateTime(data['createdAt']);
+
+      _hubDocId = hubDoc.exists ? hubDoc.id : '';
+      _hubId = _stringValue(
+        hubData['hubId'],
+        fallback: _hubDocId.isNotEmpty ? _hubDocId : '',
+      );
+      _hubNameController.text = _stringValue(
+        hubData['hubName'],
+        fallback: _fullNameController.text.trim(),
+      );
 
       if (!mounted) {
         return;
       }
 
       await _applyPendingLocationSelections();
+      _syncHubOperatingScheduleControllers();
     } catch (error) {
       if (!mounted) {
         return;
@@ -235,9 +288,12 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
 
     final country = _resolveCountry(_pendingCountry);
     final dialCode = _resolveDialCode(_pendingPhoneCountryCode, country);
-    final states = await _fetchStates(country);
+    final states = country.isNotEmpty ? await _fetchStates(country) : const <String>[];
     final state = _resolveState(_pendingState, states);
-    final cities = await _fetchCities(country, state);
+    final cities =
+        country.isNotEmpty && state.isNotEmpty
+            ? await _fetchCities(country, state)
+            : const <String>[];
     final city = _resolveCity(_pendingCity, cities);
 
     if (!mounted) {
@@ -253,9 +309,12 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       _selectedCity = city;
     });
     _syncLocationControllers();
+    _syncHubContactControllers();
   }
 
-  Future<List<_CountryOption>> _fetchCountryOptions({bool refresh = false}) async {
+  Future<List<_CountryOption>> _fetchCountryOptions({
+    bool refresh = false,
+  }) async {
     if (!refresh && _cachedLocationDatasetFuture != null) {
       return _cachedLocationDatasetFuture!;
     }
@@ -285,18 +344,17 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     }
 
     final parsedCountries = json
-        .whereType<Map>()
-        .map(
-          (item) => _CountryOption(
-            country: _stringValue(item['name']),
-            flag: _stringValue(item['emoji'], fallback: '🏳️'),
-            dialCode: '+${_stringValue(item['phonecode'])}',
-            states: _parseStates(item['states']),
-          ),
-        )
-        .where((item) => item.country.isNotEmpty && item.dialCode.isNotEmpty)
-        .toList(growable: false)
-      ..sort((a, b) => a.country.compareTo(b.country));
+      .whereType<Map>()
+      .map(
+        (item) => _CountryOption(
+          country: _stringValue(item['name']),
+          flag: _stringValue(item['emoji'], fallback: '🏳️'),
+          dialCode: '+${_stringValue(item['phonecode'])}',
+          states: _parseStates(item['states']),
+        ),
+      )
+      .where((item) => item.country.isNotEmpty && item.dialCode.isNotEmpty)
+      .toList(growable: false)..sort((a, b) => a.country.compareTo(b.country));
 
     return parsedCountries;
   }
@@ -305,11 +363,10 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     for (final option in _countryOptions) {
       if (option.country == country) {
         return option.states
-            .map((state) => state.name)
-            .where((item) => item.isNotEmpty)
-            .toSet()
-            .toList(growable: false)
-          ..sort();
+          .map((state) => state.name)
+          .where((item) => item.isNotEmpty)
+          .toSet()
+          .toList(growable: false)..sort();
       }
     }
 
@@ -322,10 +379,9 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         for (final region in option.states) {
           if (region.name == state) {
             return region.cities
-                .where((item) => item.isNotEmpty)
-                .toSet()
-                .toList(growable: false)
-              ..sort();
+              .where((item) => item.isNotEmpty)
+              .toSet()
+              .toList(growable: false)..sort();
           }
         }
       }
@@ -341,16 +397,14 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
 
     final country = _countryOptions.any((option) => option.country == value)
         ? value
-        : _countryOptions.first.country;
-    final dialCode = _countryOptions
-        .firstWhere(
-          (option) => option.country == country,
-          orElse: () => _countryOptions.first,
-        )
-        .dialCode;
-    final states = await _fetchStates(country);
+        : '';
+    final dialCode = _resolveDialCode('', country);
+    final states = country.isNotEmpty ? await _fetchStates(country) : const <String>[];
     final state = _resolveState(_selectedState, states);
-    final cities = await _fetchCities(country, state);
+    final cities =
+        country.isNotEmpty && state.isNotEmpty
+            ? await _fetchCities(country, state)
+            : const <String>[];
     final city = _resolveCity(_selectedCity, cities);
 
     if (!mounted) {
@@ -378,8 +432,9 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       return;
     }
 
-    final state = states.contains(value) ? value : states.first;
-    final cities = await _fetchCities(_selectedCountry, state);
+    final state = states.contains(value) ? value : '';
+    final cities =
+        state.isNotEmpty ? await _fetchCities(_selectedCountry, state) : const <String>[];
     final city = _resolveCity(_selectedCity, cities);
 
     if (!mounted) {
@@ -399,7 +454,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       return;
     }
 
-    final city = _cityOptions.contains(value) ? value : _cityOptions.first;
+    final city = _cityOptions.contains(value) ? value : '';
     if (!mounted) {
       return;
     }
@@ -414,9 +469,10 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       return;
     }
 
-    final code = _countryOptions.any((option) => option.dialCode == value)
-        ? value
-        : _countryOptions.first.dialCode;
+    final code =
+        _countryOptions.any((option) => option.dialCode == value)
+            ? value
+            : _countryOptions.first.dialCode;
     final country = _countryForDialCode(code);
     if (country.isNotEmpty) {
       await _setCountry(country);
@@ -431,6 +487,24 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       _selectedPhoneCountryCode = code;
     });
     _syncLocationControllers();
+  }
+
+  Future<void> _setHubContactCountryCode(String value) async {
+    if (_countryOptions.isEmpty) {
+      return;
+    }
+
+    final code =
+        _countryOptions.any((option) => option.dialCode == value)
+            ? value
+            : '';
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _hubContactCountryCodeController.text = code;
+    });
   }
 
   Future<dynamic> _getJson(Uri uri) async {
@@ -482,7 +556,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       }
     }
 
-    return states.first;
+    return '';
   }
 
   String _resolveCity(String? value, List<String> cities) {
@@ -499,13 +573,13 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       }
     }
 
-    return cities.first;
+    return '';
   }
 
   String _resolveCountry(String? value) {
     final trimmed = value?.trim() ?? '';
     if (trimmed.isEmpty) {
-      return _countryOptions.first.country;
+      return '';
     }
 
     for (final option in _countryOptions) {
@@ -514,7 +588,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       }
     }
 
-    return _countryOptions.first.country;
+    return '';
   }
 
   String _countryForDialCode(String dialCode) {
@@ -528,9 +602,23 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
 
   void _syncLocationControllers() {
     _phoneCountryCodeController.text = _selectedPhoneCountryCode;
-    _countryController.text = _selectedCountry;
-    _stateController.text = _selectedState;
-    _cityController.text = _selectedCity;
+  }
+
+  void _syncHubContactControllers() {
+    final countryCode = _inferPhoneCountryCode(_pendingHubContactNumber);
+    _hubContactCountryCodeController.text = countryCode;
+    _hubContactNumberController.text = _stripPhoneCountryCode(
+      _pendingHubContactNumber,
+      countryCode,
+    );
+  }
+
+  void _syncHubOperatingScheduleControllers() {
+    _hubOperatingHoursController.text = _formatOperatingHoursRange(context);
+    _hubOperatingStartTimeController.text = _formatTime(
+      _hubOperatingStartTime,
+    );
+    _hubOperatingEndTimeController.text = _formatTime(_hubOperatingEndTime);
   }
 
   String _resolveDialCode(String? value, String country) {
@@ -538,6 +626,10 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     if (trimmed.isNotEmpty &&
         _countryOptions.any((option) => option.dialCode == trimmed)) {
       return trimmed;
+    }
+
+    if (country.isEmpty) {
+      return '';
     }
 
     return _countryOptions
@@ -548,6 +640,151 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         .dialCode;
   }
 
+  static TimeOfDay? _readTimeOfDay(dynamic value) {
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) {
+        return null;
+      }
+
+      final parts = trimmed.split(':');
+      if (parts.length == 2) {
+        final hour = int.tryParse(parts[0]);
+        final minute = int.tryParse(parts[1]);
+        if (hour != null && minute != null) {
+          return TimeOfDay(hour: hour, minute: minute);
+        }
+      }
+    }
+    return null;
+  }
+
+  bool _hasAnyHubOperatingScheduleInput() {
+    return _hubOperatingStartDay.trim().isNotEmpty ||
+        _hubOperatingEndDay.trim().isNotEmpty ||
+        _hubOperatingStartTime != null ||
+        _hubOperatingEndTime != null;
+  }
+
+  bool _hasCompleteHubOperatingSchedule() {
+    return _hubOperatingStartDay.trim().isNotEmpty &&
+        _hubOperatingEndDay.trim().isNotEmpty &&
+        _hubOperatingStartTime != null &&
+        _hubOperatingEndTime != null;
+  }
+
+  String _formatTime(TimeOfDay? value) {
+    if (value == null) {
+      return '';
+    }
+    return MaterialLocalizations.of(context).formatTimeOfDay(value);
+  }
+
+  String _formatTimeForStorage(TimeOfDay value) {
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  String _formatOperatingHoursRange(BuildContext context) {
+    final startDay = _hubOperatingStartDay.trim();
+    final endDay = _hubOperatingEndDay.trim();
+    final startTime = _hubOperatingStartTime;
+    final endTime = _hubOperatingEndTime;
+    if (startDay.isEmpty ||
+        endDay.isEmpty ||
+        startTime == null ||
+        endTime == null) {
+      return _legacyHubOperatingHours;
+    }
+
+    final localizations = MaterialLocalizations.of(context);
+    final startTimeText = localizations.formatTimeOfDay(startTime);
+    final endTimeText = localizations.formatTimeOfDay(endTime);
+    return '${_shortDayLabel(startDay)}-${_shortDayLabel(endDay)}, $startTimeText - $endTimeText';
+  }
+
+  Future<void> _pickHubOperatingStartTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _hubOperatingStartTime ?? const TimeOfDay(hour: 9, minute: 0),
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _hubOperatingStartTime = picked;
+      _hubOperatingStartTimeController.text = _formatTime(picked);
+      _hubOperatingHoursController.text = _formatOperatingHoursRange(context);
+    });
+  }
+
+  Future<void> _pickHubOperatingEndTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _hubOperatingEndTime ?? const TimeOfDay(hour: 17, minute: 0),
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _hubOperatingEndTime = picked;
+      _hubOperatingEndTimeController.text = _formatTime(picked);
+      _hubOperatingHoursController.text = _formatOperatingHoursRange(context);
+    });
+  }
+
+  static String _shortDayLabel(String day) {
+    return switch (day.toLowerCase()) {
+      'monday' => 'Mon',
+      'tuesday' => 'Tue',
+      'wednesday' => 'Wed',
+      'thursday' => 'Thu',
+      'friday' => 'Fri',
+      'saturday' => 'Sat',
+      'sunday' => 'Sun',
+      _ => day,
+    };
+  }
+
+  String _inferPhoneCountryCode(String phone) {
+    final trimmed = phone.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+
+    for (final option in _countryOptions) {
+      if (trimmed.startsWith(option.dialCode)) {
+        return option.dialCode;
+      }
+    }
+
+    return '';
+  }
+
+  bool _hasBaseProfileRequirements() {
+    return _fullNameController.text.trim().isNotEmpty &&
+        _selectedPhoneCountryCode.trim().isNotEmpty &&
+        _phoneController.text.trim().isNotEmpty &&
+        _addressController.text.trim().isNotEmpty;
+  }
+
+  bool _hasHubProfileRequirements() {
+    if (widget.role != UserRole.hub) {
+      return true;
+    }
+
+    return _hubNameController.text.trim().isNotEmpty &&
+        (_hasCompleteHubOperatingSchedule() ||
+            _legacyHubOperatingHours.trim().isNotEmpty) &&
+        _hubContactCountryCodeController.text.trim().isNotEmpty &&
+        _hubContactNumberController.text.trim().isNotEmpty;
+  }
+
+  bool _shouldBeActive() {
+    return _hasBaseProfileRequirements() && _hasHubProfileRequirements();
+  }
+
   String _flagEmojiFromCountryCode(String code) {
     final letters = code.trim().toUpperCase().codeUnits;
     if (letters.length != 2) {
@@ -555,10 +792,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     }
 
     final offset = 0x1F1E6 - 65;
-    return String.fromCharCodes([
-      letters[0] + offset,
-      letters[1] + offset,
-    ]);
+    return String.fromCharCodes([letters[0] + offset, letters[1] + offset]);
   }
 
   List<_StateOption> _parseStates(dynamic statesValue) {
@@ -567,16 +801,15 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     }
 
     return statesValue
-        .whereType<Map>()
-        .map(
-          (item) => _StateOption(
-            name: _stringValue(item['name']),
-            cities: _parseCities(item['cities']),
-          ),
-        )
-        .where((state) => state.name.isNotEmpty)
-        .toList(growable: false)
-      ..sort((a, b) => a.name.compareTo(b.name));
+      .whereType<Map>()
+      .map(
+        (item) => _StateOption(
+          name: _stringValue(item['name']),
+          cities: _parseCities(item['cities']),
+        ),
+      )
+      .where((state) => state.name.isNotEmpty)
+      .toList(growable: false)..sort((a, b) => a.name.compareTo(b.name));
   }
 
   List<String> _parseCities(dynamic citiesValue) {
@@ -585,12 +818,11 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     }
 
     return citiesValue
-        .whereType<Map>()
-        .map((item) => _stringValue(item['name']))
-        .where((item) => item.isNotEmpty)
-        .toSet()
-        .toList(growable: false)
-      ..sort();
+      .whereType<Map>()
+      .map((item) => _stringValue(item['name']))
+      .where((item) => item.isNotEmpty)
+      .toSet()
+      .toList(growable: false)..sort();
   }
 
   ImageProvider? _profileImageProvider() {
@@ -659,7 +891,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       }
 
       final wasInactive = _status.toLowerCase() == 'inactive';
-      final nextStatus = wasInactive ? 'active' : _status;
+      final nextStatus = _shouldBeActive() ? 'active' : 'inactive';
 
       if (_fullNameController.text.trim().isNotEmpty &&
           _fullNameController.text.trim() != (user.displayName ?? '')) {
@@ -675,21 +907,61 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
             '$_selectedPhoneCountryCode${_phoneController.text.trim()}',
         'phoneLocalNumber': _phoneController.text.trim(),
         'bio': _bioController.text.trim(),
-        'city': _selectedCity,
-        'state': _selectedState,
-        'country': _selectedCountry,
+        'address': _addressController.text.trim(),
         'role': widget.role.key,
         'status': nextStatus,
         'profileImageUrl': _profileImageUrl,
-        'createdAt': _createdAt == null
-            ? FieldValue.serverTimestamp()
-            : Timestamp.fromDate(_createdAt!),
+        'createdAt':
+            _createdAt == null
+                ? FieldValue.serverTimestamp()
+                : Timestamp.fromDate(_createdAt!),
       };
 
       await _firestore
           .collection('USER')
           .doc(user.uid)
           .set(payload, SetOptions(merge: true));
+
+      if (widget.role == UserRole.hub) {
+        final hubDocId = _hubDocId.isNotEmpty ? _hubDocId : user.uid;
+        final hubId = _hubId.isNotEmpty ? _hubId : hubDocId;
+        final hubContactNumber =
+            '${_hubContactCountryCodeController.text.trim()}${_hubContactNumberController.text.trim()}';
+        final hasAnyScheduleInput = _hasAnyHubOperatingScheduleInput();
+        final hasCompleteSchedule = _hasCompleteHubOperatingSchedule();
+
+        if (hasAnyScheduleInput && !hasCompleteSchedule) {
+          throw Exception(
+            'Fill start day, end day, start time, and end time together.',
+          );
+        }
+
+        final operatingHours =
+            hasCompleteSchedule
+                ? _formatOperatingHoursRange(context)
+                : _legacyHubOperatingHours;
+        await _firestore.collection('COMMUNITY_HUB').doc(hubDocId).set({
+          'hubId': hubId,
+          'userId': user.uid,
+          'hubName': _hubNameController.text.trim(),
+          'address': _addressController.text.trim(),
+          'operatingHours': operatingHours,
+          'operatingStartDay': _hubOperatingStartDay,
+          'operatingEndDay': _hubOperatingEndDay,
+          'operatingStartTime':
+              _hubOperatingStartTime == null
+                  ? null
+                  : _formatTimeForStorage(_hubOperatingStartTime!),
+          'operatingEndTime':
+              _hubOperatingEndTime == null
+                  ? null
+                  : _formatTimeForStorage(_hubOperatingEndTime!),
+          'contactCountryCode': _hubContactCountryCodeController.text.trim(),
+          'contactLocalNumber': _hubContactNumberController.text.trim(),
+          'contactNumber': hubContactNumber,
+          'status': nextStatus,
+        }, SetOptions(merge: true));
+      }
 
       await _firestore.collection('USER').doc(user.uid).set({
         'fullName': _fullNameController.text.trim(),
@@ -700,9 +972,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
             '$_selectedPhoneCountryCode${_phoneController.text.trim()}',
         'phoneLocalNumber': _phoneController.text.trim(),
         'bio': _bioController.text.trim(),
-        'city': _selectedCity,
-        'state': _selectedState,
-        'country': _selectedCountry,
+        'address': _addressController.text.trim(),
         'role': widget.role.key,
         'status': nextStatus,
         'profileImageUrl': _profileImageUrl,
@@ -715,14 +985,20 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       setState(() {
         _status = nextStatus;
         _isSavingProfile = false;
+        if (widget.role == UserRole.hub) {
+          _hubDocId = _hubDocId.isNotEmpty ? _hubDocId : user.uid;
+          _hubId = _hubId.isNotEmpty ? _hubId : _hubDocId;
+        }
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            wasInactive
-                ? 'Profile updated. Your account is now active.'
-                : 'Profile updated.',
+            nextStatus == 'active'
+                ? wasInactive
+                    ? 'Profile updated. Your account is now active.'
+                    : 'Profile updated.'
+                : 'Profile saved. Complete the required fields to activate your account.',
           ),
         ),
       );
@@ -737,9 +1013,9 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         _ => 'Unable to update profile right now.',
       };
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (_) {
       setState(() {
         _isSavingProfile = false;
@@ -755,9 +1031,9 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Signed out.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Signed out.')));
   }
 
   @override
@@ -770,18 +1046,9 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     }
 
     if (_errorMessage != null) {
-      return AppErrorState(
-        message: _errorMessage!,
-        onRetry: _bootstrapProfile,
-      );
+      return AppErrorState(message: _errorMessage!, onRetry: _bootstrapProfile);
     }
 
-    final states = _stateOptions.isNotEmpty
-        ? _stateOptions
-        : const <String>[];
-    final cities = _cityOptions.isNotEmpty
-        ? _cityOptions
-        : const <String>[];
     final phoneCodes = countries
         .map((option) => option.dialCode)
         .where((value) => value.trim().isNotEmpty)
@@ -795,39 +1062,13 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
           profileImageProvider: profileImageProvider,
           onEditImage: _pickProfileImage,
           userId: user?.uid ?? 'Not available',
-          fullName: _fullNameController.text.trim().isNotEmpty
-              ? _fullNameController.text.trim()
-              : (user?.displayName ?? user?.email ?? 'CommunityShare user'),
+          fullName:
+              _fullNameController.text.trim().isNotEmpty
+                  ? _fullNameController.text.trim()
+                  : (user?.displayName ?? user?.email ?? 'CommunityShare user'),
           roleLabel: widget.role.label,
           status: _status,
         ),
-        if (_status.toLowerCase() == 'inactive') ...[
-          const SizedBox(height: AppSpacing.md),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.info_outline_rounded,
-                    color: AppColors.sun,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      'Your account is inactive. Fill in the required profile fields and save to reactivate your account.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.mist,
-                            height: 1.5,
-                          ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
         const SizedBox(height: AppSpacing.lg),
         Card(
           child: Padding(
@@ -840,8 +1081,8 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                   Text(
                     'Account Details',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   Center(
@@ -854,13 +1095,14 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                             radius: 44,
                             backgroundColor: AppColors.forest,
                             backgroundImage: profileImageProvider,
-                            child: profileImageProvider == null
-                                ? const Icon(
-                                    Icons.person_outline_rounded,
-                                    size: 42,
-                                    color: AppColors.sand,
-                                  )
-                                : null,
+                            child:
+                                profileImageProvider == null
+                                    ? const Icon(
+                                      Icons.person_outline_rounded,
+                                      size: 42,
+                                      color: AppColors.sand,
+                                    )
+                                    : null,
                           ),
                         ),
                         if (_profileImageProvider() != null ||
@@ -895,9 +1137,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                     label: 'Full Name *',
                     prefixIcon: const Icon(Icons.badge_outlined),
                     validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Enter your full name.';
-                      }
                       return null;
                     },
                   ),
@@ -905,7 +1144,9 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                   if (_isLoadingLocationData)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                      child: AppLoadingState(message: 'Loading location options...'),
+                      child: AppLoadingState(
+                        message: 'Loading location options...',
+                      ),
                     )
                   else if (_locationErrorMessage != null) ...[
                     AppErrorState(
@@ -933,10 +1174,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                           },
                           validator: (value) {
                             final code = value?.trim() ?? '';
-                            if (code.isEmpty) {
-                              return 'Select a code.';
-                            }
-                            if (!phoneCodes.contains(code)) {
+                            if (code.isNotEmpty && !phoneCodes.contains(code)) {
                               return 'Pick a valid code.';
                             }
                             return null;
@@ -951,11 +1189,11 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                             keyboardType: TextInputType.phone,
                             prefixIcon: const Icon(Icons.phone_outlined),
                             validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return 'Enter your phone number.';
-                              }
-                              if (!RegExp(r'^[0-9\s-]{6,}$')
-                                  .hasMatch(value.trim())) {
+                              final trimmed = value?.trim() ?? '';
+                              if (trimmed.isNotEmpty &&
+                                  !RegExp(
+                                    r'^[0-9\s-]{6,}$',
+                                  ).hasMatch(trimmed)) {
                                 return 'Use digits only for the local phone number.';
                               }
                               return null;
@@ -965,89 +1203,203 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                       ],
                     ),
                     const SizedBox(height: AppSpacing.lg),
-                    _SearchableFormField(
-                      controller: _countryController,
-                      label: 'Country *',
-                      hint: 'Type to search',
-                      options: countries.map((option) => option.country).toList(growable: false),
-                      prefixIcon: const Icon(Icons.public_outlined),
-                      optionLabelBuilder: (country) {
-                        final option = countries.firstWhere(
-                          (item) => item.country == country,
-                          orElse: () => countries.first,
-                        );
-                        return '${option.flag} ${option.country}';
-                      },
+                    AppTextField(
+                      controller: _addressController,
+                      label: 'Address *',
+                      hint: 'Enter your address',
+                      prefixIcon: const Icon(Icons.place_outlined),
                       validator: (value) {
-                        final country = value?.trim() ?? '';
-                        if (country.isEmpty) {
-                          return 'Select your country.';
-                        }
-                        if (!countries.any((option) => option.country == country)) {
-                          return 'Pick a valid country.';
+                        if ((value ?? '').trim().isEmpty) {
+                          return 'Enter your address.';
                         }
                         return null;
                       },
-                      onSelected: _setCountry,
+                    ),
+                  ],
+                  if (widget.role == UserRole.hub) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(
+                      'Hub Details',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    const Text(
+                      'Fill these in to reactivate your hub account and make it available in handover flows.',
+                      style: TextStyle(
+                        color: AppColors.mist,
+                        height: 1.5,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    _SearchableFormField(
-                      controller: _stateController,
-                      label: 'State *',
-                      hint: _selectedCountry.isEmpty
-                          ? 'Select a country first'
-                          : 'Type to search',
-                      options: states,
-                      enabled: _selectedCountry.isNotEmpty,
-                      prefixIcon: const Icon(Icons.map_outlined),
-                      optionLabelBuilder: (state) => state,
+                    AppTextField(
+                      controller: _hubNameController,
+                      label: 'Hub Name *',
+                      prefixIcon: const Icon(Icons.storefront_outlined),
                       validator: (value) {
-                        final state = value?.trim() ?? '';
-                        if (_selectedCountry.isEmpty) {
-                          return 'Select your country first.';
-                        }
-                        if (state.isEmpty) {
-                          return 'Select your state.';
-                        }
-                        if (!states.contains(state)) {
-                          return 'Pick a valid state.';
-                        }
                         return null;
                       },
-                      onSelected: _setState,
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    _SearchableFormField(
-                      controller: _cityController,
-                      label: 'City *',
-                      hint: _selectedState.isEmpty
-                          ? 'Select a state first'
-                          : 'Type to search',
-                      options: cities,
-                      enabled: _selectedState.isNotEmpty,
-                      prefixIcon: const Icon(Icons.location_city_outlined),
-                      optionLabelBuilder: (city) => city,
+                    DropdownButtonFormField<String>(
+                      initialValue:
+                          _weekdayOptions.contains(_hubOperatingStartDay)
+                              ? _hubOperatingStartDay
+                              : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Start Day *',
+                        prefixIcon: Icon(Icons.event_outlined),
+                      ),
+                      items: _weekdayOptions
+                          .map(
+                            (day) => DropdownMenuItem<String>(
+                              value: day,
+                              child: Text(day),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: _isSavingProfile
+                          ? null
+                          : (value) {
+                              setState(() {
+                                _hubOperatingStartDay = value ?? '';
+                                _hubOperatingHoursController.text =
+                                    _formatOperatingHoursRange(context);
+                              });
+                            },
                       validator: (value) {
-                        final city = value?.trim() ?? '';
-                        if (_selectedState.isEmpty) {
-                          return 'Select your state first.';
-                        }
-                        if (city.isEmpty) {
-                          return 'Select your city.';
-                        }
-                        if (!cities.contains(city)) {
-                          return 'Pick a valid city.';
+                        if ((value ?? '').trim().isEmpty &&
+                            _hasAnyHubOperatingScheduleInput()) {
+                          return 'Select a start day.';
                         }
                         return null;
                       },
-                      onSelected: _setCity,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    DropdownButtonFormField<String>(
+                      initialValue:
+                          _weekdayOptions.contains(_hubOperatingEndDay)
+                              ? _hubOperatingEndDay
+                              : null,
+                      decoration: const InputDecoration(
+                        labelText: 'End Day *',
+                        prefixIcon: Icon(Icons.event_outlined),
+                      ),
+                      items: _weekdayOptions
+                          .map(
+                            (day) => DropdownMenuItem<String>(
+                              value: day,
+                              child: Text(day),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: _isSavingProfile
+                          ? null
+                          : (value) {
+                              setState(() {
+                                _hubOperatingEndDay = value ?? '';
+                                _hubOperatingHoursController.text =
+                                    _formatOperatingHoursRange(context);
+                              });
+                            },
+                      validator: (value) {
+                        if ((value ?? '').trim().isEmpty &&
+                            _hasAnyHubOperatingScheduleInput()) {
+                          return 'Select an end day.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    AppTextField(
+                      controller: _hubOperatingStartTimeController,
+                      label: 'Start Time *',
+                      hint: 'Select start time',
+                      readOnly: true,
+                      onTap: _pickHubOperatingStartTime,
+                      prefixIcon: const Icon(Icons.schedule_outlined),
+                      suffixIcon: IconButton(
+                        onPressed: _pickHubOperatingStartTime,
+                        icon: const Icon(Icons.access_time_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    AppTextField(
+                      controller: _hubOperatingEndTimeController,
+                      label: 'End Time *',
+                      hint: 'Select end time',
+                      readOnly: true,
+                      onTap: _pickHubOperatingEndTime,
+                      prefixIcon: const Icon(Icons.schedule_outlined),
+                      suffixIcon: IconButton(
+                        onPressed: _pickHubOperatingEndTime,
+                        icon: const Icon(Icons.access_time_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    const Text(
+                      'Fill all four fields together to set the hub schedule.',
+                      style: TextStyle(
+                        color: AppColors.mist,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _SearchableFormField(
+                          width: 88,
+                          controller: _hubContactCountryCodeController,
+                          label: 'Code *',
+                          hint: '+65',
+                          options: phoneCodes,
+                          enabled: phoneCodes.isNotEmpty,
+                          optionLabelBuilder: (code) {
+                            final option = _countryOptions.firstWhere(
+                              (item) => item.dialCode == code,
+                              orElse: () => _countryOptions.first,
+                            );
+                            return '${option.flag} $code';
+                          },
+                          validator: (value) {
+                            final code = value?.trim() ?? '';
+                            if (code.isNotEmpty && !phoneCodes.contains(code)) {
+                              return 'Pick a valid code.';
+                            }
+                            return null;
+                          },
+                          onSelected: _setHubContactCountryCode,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: AppTextField(
+                            controller: _hubContactNumberController,
+                            label: 'Contact Number *',
+                            keyboardType: TextInputType.phone,
+                            prefixIcon: const Icon(Icons.phone_outlined),
+                            validator: (value) {
+                              final trimmed = value?.trim() ?? '';
+                              if (trimmed.isNotEmpty &&
+                                  !RegExp(
+                                    r'^[0-9\s-]{6,}$',
+                                  ).hasMatch(trimmed)) {
+                                return 'Use digits only for the local phone number.';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                   const SizedBox(height: AppSpacing.lg),
                   AppTextField(
                     controller: _bioController,
                     label: 'Bio',
-                    hint: 'Tell people a little about yourself. Max 150 characters.',
+                    hint:
+                        'Tell people a little about yourself. Max 150 characters.',
                     prefixIcon: const Icon(Icons.notes_outlined),
                     validator: (value) {
                       if ((value ?? '').trim().length > 150) {
@@ -1060,11 +1412,12 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                   AppPrimaryButton(
                     label: 'Save profile',
                     isLoading: _isSavingProfile,
-                    onPressed: (_isSavingProfile ||
-                            _isLoadingLocationData ||
-                            countries.isEmpty)
-                        ? null
-                        : _saveProfile,
+                    onPressed:
+                        (_isSavingProfile ||
+                                _isLoadingLocationData ||
+                                countries.isEmpty)
+                            ? null
+                            : _saveProfile,
                     icon: const Icon(Icons.save_outlined),
                   ),
                 ],
@@ -1192,8 +1545,8 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       }
     }
     return _countryOptions.first.states.first.cities.toSet().toList(
-          growable: false,
-        );
+      growable: false,
+    );
   }
 }
 
@@ -1207,7 +1560,6 @@ class _SearchableFormField extends StatefulWidget {
     this.width,
     this.enabled = true,
     this.hint,
-    this.prefixIcon,
     this.validator,
   });
 
@@ -1219,7 +1571,6 @@ class _SearchableFormField extends StatefulWidget {
   final String Function(String value) optionLabelBuilder;
   final double? width;
   final bool enabled;
-  final Widget? prefixIcon;
   final FormFieldValidator<String>? validator;
 
   @override
@@ -1287,14 +1638,14 @@ class _SearchableFormFieldState extends State<_SearchableFormField> {
                 decoration: InputDecoration(
                   labelText: widget.label,
                   hintText: widget.hint,
-                  prefixIcon: widget.prefixIcon,
                   isDense: widget.width != null,
-                  contentPadding: widget.width != null
-                      ? const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm,
-                          vertical: AppSpacing.sm,
-                        )
-                      : null,
+                  contentPadding:
+                      widget.width != null
+                          ? const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm,
+                            vertical: AppSpacing.sm,
+                          )
+                          : null,
                 ),
                 onFieldSubmitted: (_) {
                   final exact = resolveExactMatch(fieldController.text);
@@ -1369,10 +1720,7 @@ class _CountryOption {
 }
 
 class _StateOption {
-  const _StateOption({
-    required this.name,
-    required this.cities,
-  });
+  const _StateOption({required this.name, required this.cities});
 
   final String name;
   final List<String> cities;
@@ -1384,10 +1732,7 @@ const List<_CountryOption> _countryOptions = [
     flag: '🇸🇬',
     dialCode: '+65',
     states: [
-      _StateOption(
-        name: 'Singapore',
-        cities: ['Singapore'],
-      ),
+      _StateOption(name: 'Singapore', cities: ['Singapore']),
     ],
   ),
   _CountryOption(
@@ -1503,13 +1848,14 @@ class _ProfileHero extends StatelessWidget {
               radius: 30,
               backgroundColor: AppColors.white.withValues(alpha: 0.14),
               backgroundImage: profileImageProvider,
-              child: profileImageProvider == null
-                  ? const Icon(
-                      Icons.person_outline_rounded,
-                      size: 30,
-                      color: AppColors.sand,
-                    )
-                  : null,
+              child:
+                  profileImageProvider == null
+                      ? const Icon(
+                        Icons.person_outline_rounded,
+                        size: 30,
+                        color: AppColors.sand,
+                      )
+                      : null,
             ),
           ),
           const SizedBox(width: AppSpacing.md),

@@ -171,6 +171,13 @@ class _DonorDonationStatusTrackingPageState
     }
 
     final snapshot = _snapshot!;
+    final canShowRecipientContact =
+        snapshot.handoverType == 'independent_pickup' &&
+        snapshot.requestStatus.toLowerCase() != 'pending' &&
+        snapshot.requestStatus.toLowerCase() != 'rejected' &&
+        snapshot.requestStatus.toLowerCase() != 'cancelled' &&
+        snapshot.requestStatus.toLowerCase() != 'completed' &&
+        snapshot.handoverStatus.toLowerCase() != 'completed';
     return Scaffold(
       appBar: _buildAppBar(),
       body: RefreshIndicator(
@@ -197,14 +204,16 @@ class _DonorDonationStatusTrackingPageState
                     label: 'Recipient',
                     value: widget.request.recipientName,
                   ),
-                  _InfoRow(
-                    label: 'Phone',
-                    value: widget.request.recipientPhone,
-                  ),
-                  _InfoRow(
-                    label: 'Location',
-                    value: widget.request.recipientLocation,
-                  ),
+                  if (canShowRecipientContact)
+                    _InfoRow(
+                      label: 'Phone',
+                      value: widget.request.recipientPhone,
+                    ),
+                  if (canShowRecipientContact)
+                    _InfoRow(
+                      label: 'Address',
+                      value: widget.request.recipientAddress,
+                    ),
                   _InfoRow(
                     label: 'Category',
                     value: titleCaseLabel(snapshot.itemCategory),

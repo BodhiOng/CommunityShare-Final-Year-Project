@@ -21,6 +21,7 @@ class _RecipientRequestStatusPageState
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   bool _isLoading = true;
+  bool _isMarkingReceived = false;
   String _errorMessage = '';
   _TrackingSnapshot? _snapshot;
 
@@ -187,6 +188,138 @@ class _RecipientRequestStatusPageState
     return {...?legacyDoc.data(), ...?userDoc.data()};
   }
 
+  Future<void> _markAsReceived(_TrackingSnapshot snapshot) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Mark request as received?'),
+            content: const Text(
+              'This will complete the request and remove your phone and address from donor-facing views.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Back'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Mark received'),
+              ),
+            ],
+          ),
+    );
+
+    if (confirm != true) {
+      return;
+    }
+
+    setState(() {
+      _isMarkingReceived = true;
+    });
+
+    try {
+      final requestRef =
+          _firestore.collection('ITEM_REQUEST').doc(widget.request.docId);
+      final handoverRef = snapshot.handoverId.isNotEmpty
+          ? _firestore.collection('HANDOVER').doc(snapshot.handoverId)
+          : (await _firestore
+                    .collection('HANDOVER')
+                    .where('requestId', isEqualTo: widget.request.requestId)
+                    .limit(1)
+                    .get())
+                .docs
+                .firstOrNull
+                ?.reference;
+
+      DocumentReference<Map<String, dynamic>>? itemRef;
+      if (widget.request.itemDocId.isNotEmpty) {
+        itemRef =
+            _firestore.collection('ITEM_LISTING').doc(widget.request.itemDocId);
+      } else if (widget.request.itemId.isNotEmpty) {
+        final itemSnapshot =
+            await _firestore
+                .collection('ITEM_LISTING')
+                .where('itemId', isEqualTo: widget.request.itemId)
+                .limit(1)
+                .get();
+        if (itemSnapshot.docs.isNotEmpty) {
+          itemRef = itemSnapshot.docs.first.reference;
+        }
+      }
+
+      final batch = _firestore.batch();
+      batch.update(requestRef, {
+        'requestStatus': 'completed',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (itemRef != null) {
+        batch.update(itemRef, {
+          'availabilityStatus': 'claimed',
+        });
+      }
+
+      if (handoverRef != null) {
+        batch.set(
+          handoverRef,
+          {
+            'handoverStatus': 'completed',
+            'completedAt': FieldValue.serverTimestamp(),
+            'receivedByRecipientAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+
+      final historyRef = _firestore
+          .collection('DONATION_STATUS_HISTORY')
+          .doc('status_${DateTime.now().millisecondsSinceEpoch}');
+      batch.set(historyRef, {
+        'statusHistoryId': historyRef.id,
+        'requestId': widget.request.requestId,
+        'status': 'completed',
+        'changedAt': FieldValue.serverTimestamp(),
+        'changedByUserId': 'recipient',
+      });
+
+      await batch.commit();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Request marked as received.')),
+      );
+      await _loadTracking();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to complete request: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isMarkingReceived = false;
+        });
+      }
+    }
+  }
+
+  bool _canMarkAsReceived(_TrackingSnapshot snapshot) {
+    final requestStatus = snapshot.requestStatus.toLowerCase();
+    final handoverStatus = snapshot.handoverStatus.toLowerCase();
+    return snapshot.handoverType == 'independent_pickup' &&
+        requestStatus != 'completed' &&
+        requestStatus != 'rejected' &&
+        requestStatus != 'cancelled' &&
+        handoverStatus == 'delivering_to_recipient';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -204,6 +337,7 @@ class _RecipientRequestStatusPageState
     }
 
     final snapshot = _snapshot!;
+    final canMarkReceived = _canMarkAsReceived(snapshot);
     return Scaffold(
       appBar: AppBar(title: const Text('Request Status')),
       body: RefreshIndicator(
@@ -287,6 +421,45 @@ class _RecipientRequestStatusPageState
           ],
         ),
       ),
+      bottomNavigationBar:
+          canMarkReceived
+              ? SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.sm,
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        _isMarkingReceived
+                            ? null
+                            : () => _markAsReceived(snapshot),
+                    icon:
+                        _isMarkingReceived
+                            ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.night,
+                              ),
+                            )
+                            : const Icon(Icons.assignment_turned_in_outlined),
+                    label: Text(
+                      _isMarkingReceived
+                          ? 'Marking received...'
+                          : 'Mark Request as Received',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(52),
+                    ),
+                  ),
+                ),
+              )
+              : null,
     );
   }
 

@@ -17,14 +17,9 @@ class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
   final _fullNameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _phoneNumberController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _recipientTypeController = TextEditingController();
-  final _hubNameController = TextEditingController();
-  final _hubAddressController = TextEditingController();
-  final _hubOperatingHoursController = TextEditingController();
-  final _hubContactNumberController = TextEditingController();
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
@@ -49,14 +44,9 @@ class _RegisterPageState extends State<RegisterPage> {
   void dispose() {
     _fullNameController.dispose();
     _emailController.dispose();
-    _phoneNumberController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _recipientTypeController.dispose();
-    _hubNameController.dispose();
-    _hubAddressController.dispose();
-    _hubOperatingHoursController.dispose();
-    _hubContactNumberController.dispose();
     super.dispose();
   }
 
@@ -78,19 +68,8 @@ class _RegisterPageState extends State<RegisterPage> {
         'fullName': _fullNameController.text.trim(),
         'email': email,
         'password': password,
-        'phoneNumber': _phoneNumberController.text.trim(),
         'role': _selectedRole,
         if (_isRecipient) 'recipientType': _recipientTypeController.text.trim(),
-        if (_isHub)
-          'hubDetails': {
-            'hubName': _hubNameController.text.trim(),
-            'address': _hubAddressController.text.trim(),
-            'operatingHours': _hubOperatingHoursController.text.trim(),
-            'contactNumber':
-                _hubContactNumberController.text.trim().isEmpty
-                    ? _phoneNumberController.text.trim()
-                    : _hubContactNumberController.text.trim(),
-          },
       });
 
       await _auth.signInWithEmailAndPassword(email: email, password: password);
@@ -189,14 +168,6 @@ class _RegisterPageState extends State<RegisterPage> {
                             ],
                           ),
                           const SizedBox(height: AppSpacing.sm),
-                          const Text(
-                            'This creates a Firebase account, a USER record, and the linked role table entry.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: AppColors.mist,
-                              height: 1.5,
-                            ),
-                          ),
                           const SizedBox(height: AppSpacing.xl),
                           AppTextField(
                             controller: _fullNameController,
@@ -231,13 +202,6 @@ class _RegisterPageState extends State<RegisterPage> {
                               }
                               return null;
                             },
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          AppTextField(
-                            controller: _phoneNumberController,
-                            label: 'Phone Number',
-                            keyboardType: TextInputType.phone,
-                            prefixIcon: const Icon(Icons.phone_outlined),
                           ),
                           const SizedBox(height: AppSpacing.md),
                           DropdownButtonFormField<String>(
@@ -293,49 +257,13 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                           ],
                           if (_isHub) ...[
-                            const SizedBox(height: AppSpacing.md),
-                            AppTextField(
-                              controller: _hubNameController,
-                              label: 'Hub Name',
-                              prefixIcon: const Icon(Icons.storefront_outlined),
-                              validator: (value) {
-                                if (!_isHub) {
-                                  return null;
-                                }
-                                if ((value ?? '').trim().isEmpty) {
-                                  return 'Enter the hub name.';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            AppTextField(
-                              controller: _hubAddressController,
-                              label: 'Address',
-                              prefixIcon: const Icon(Icons.place_outlined),
-                              validator: (value) {
-                                if (!_isHub) {
-                                  return null;
-                                }
-                                if ((value ?? '').trim().isEmpty) {
-                                  return 'Enter the hub address.';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            AppTextField(
-                              controller: _hubOperatingHoursController,
-                              label: 'Operating Hours',
-                              hint: 'Mon-Fri, 9am-5pm',
-                              prefixIcon: const Icon(Icons.schedule_outlined),
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            AppTextField(
-                              controller: _hubContactNumberController,
-                              label: 'Hub Contact Number',
-                              keyboardType: TextInputType.phone,
-                              prefixIcon: const Icon(Icons.call_outlined),
+                            const SizedBox(height: AppSpacing.sm),
+                            const Text(
+                              'Hub details can be completed later from your profile while the account is inactive.',
+                              style: TextStyle(
+                                color: AppColors.mist,
+                                height: 1.5,
+                              ),
                             ),
                           ],
                           const SizedBox(height: AppSpacing.md),

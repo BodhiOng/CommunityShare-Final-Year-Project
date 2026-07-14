@@ -6,6 +6,16 @@ import '../../constants.dart';
 import '../../widgets/app_forms.dart';
 import '../../widgets/state_widgets.dart';
 
+const List<String> _weekdayOptions = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+];
+
 class ManageHubProfilePage extends StatefulWidget {
   const ManageHubProfilePage({super.key});
 
@@ -20,9 +30,11 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
 
   final TextEditingController _hubNameController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
-  final TextEditingController _operatingHoursController =
-      TextEditingController();
   final TextEditingController _contactNumberController =
+      TextEditingController();
+  final TextEditingController _operatingStartTimeController =
+      TextEditingController();
+  final TextEditingController _operatingEndTimeController =
       TextEditingController();
 
   bool _isLoading = true;
@@ -31,6 +43,11 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
   String _status = 'active';
   String _hubDocId = '';
   String _hubId = '';
+  String _legacyOperatingHours = '';
+  String _operatingStartDay = '';
+  String _operatingEndDay = '';
+  TimeOfDay? _operatingStartTime;
+  TimeOfDay? _operatingEndTime;
 
   @override
   void initState() {
@@ -42,8 +59,9 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
   void dispose() {
     _hubNameController.dispose();
     _addressController.dispose();
-    _operatingHoursController.dispose();
     _contactNumberController.dispose();
+    _operatingStartTimeController.dispose();
+    _operatingEndTimeController.dispose();
     super.dispose();
   }
 
@@ -70,12 +88,18 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
 
       _hubNameController.text = _stringValue(data['hubName']);
       _addressController.text = _stringValue(data['address']);
-      _operatingHoursController.text = _stringValue(data['operatingHours']);
       _contactNumberController.text = _stringValue(data['contactNumber']);
+      _legacyOperatingHours = _stringValue(data['operatingHours']);
+      _operatingStartDay = _stringValue(data['operatingStartDay']);
+      _operatingEndDay = _stringValue(data['operatingEndDay']);
+      _operatingStartTime = _readTimeOfDay(data['operatingStartTime']);
+      _operatingEndTime = _readTimeOfDay(data['operatingEndTime']);
 
       if (!mounted) {
         return;
       }
+
+      _syncOperatingScheduleControllers();
 
       setState(() {
         _hubDocId = doc?.id ?? userId;
@@ -111,7 +135,19 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
     try {
       final docId = _hubDocId.isNotEmpty ? _hubDocId : userId;
       final hubId = _hubId.isNotEmpty ? _hubId : docId;
-      final operatingHours = _operatingHoursController.text.trim();
+      final hasAnyScheduleInput = _hasAnyOperatingScheduleInput();
+      final hasCompleteSchedule = _hasCompleteOperatingSchedule();
+
+      if (hasAnyScheduleInput && !hasCompleteSchedule) {
+        throw Exception(
+          'Fill start day, end day, start time, and end time together.',
+        );
+      }
+
+      final operatingHours =
+          hasCompleteSchedule
+              ? _formatOperatingHoursRange(context)
+              : _legacyOperatingHours;
 
       await _firestore.collection('COMMUNITY_HUB').doc(docId).set({
         'hubId': hubId,
@@ -119,6 +155,14 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
         'hubName': _hubNameController.text.trim(),
         'address': _addressController.text.trim(),
         'operatingHours': operatingHours,
+        'operatingStartDay': _operatingStartDay,
+        'operatingEndDay': _operatingEndDay,
+        'operatingStartTime': _operatingStartTime == null
+            ? null
+            : _formatTimeForStorage(_operatingStartTime!),
+        'operatingEndTime': _operatingEndTime == null
+            ? null
+            : _formatTimeForStorage(_operatingEndTime!),
         'contactNumber': _contactNumberController.text.trim(),
         'status': _status,
       }, SetOptions(merge: true));
@@ -223,17 +267,101 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
                     },
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  AppTextField(
-                    controller: _operatingHoursController,
-                    label: 'Operating Hours',
-                    hint: 'e.g. Mon-Fri, 9 AM - 6 PM',
-                    prefixIcon: const Icon(Icons.schedule_outlined),
+                  DropdownButtonFormField<String>(
+                    initialValue:
+                        _weekdayOptions.contains(_operatingStartDay)
+                            ? _operatingStartDay
+                            : null,
+                    decoration: const InputDecoration(
+                      labelText: 'Start Day',
+                      prefixIcon: Icon(Icons.event_outlined),
+                    ),
+                    items: _weekdayOptions
+                        .map(
+                          (day) => DropdownMenuItem<String>(
+                            value: day,
+                            child: Text(day),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: _isSaving
+                        ? null
+                        : (value) {
+                            setState(() {
+                              _operatingStartDay = value ?? '';
+                            });
+                          },
                     validator: (value) {
-                      if ((value ?? '').trim().isEmpty) {
-                        return 'Enter operating hours.';
+                      if ((value ?? '').trim().isEmpty &&
+                          _hasAnyOperatingScheduleInput()) {
+                        return 'Select a start day.';
                       }
                       return null;
                     },
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  DropdownButtonFormField<String>(
+                    initialValue:
+                        _weekdayOptions.contains(_operatingEndDay)
+                            ? _operatingEndDay
+                            : null,
+                    decoration: const InputDecoration(
+                      labelText: 'End Day',
+                      prefixIcon: Icon(Icons.event_outlined),
+                    ),
+                    items: _weekdayOptions
+                        .map(
+                          (day) => DropdownMenuItem<String>(
+                            value: day,
+                            child: Text(day),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: _isSaving
+                        ? null
+                        : (value) {
+                            setState(() {
+                              _operatingEndDay = value ?? '';
+                            });
+                          },
+                    validator: (value) {
+                      if ((value ?? '').trim().isEmpty &&
+                          _hasAnyOperatingScheduleInput()) {
+                        return 'Select an end day.';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  AppTextField(
+                    controller: _operatingStartTimeController,
+                    label: 'Start Time',
+                    hint: 'Select start time',
+                    readOnly: true,
+                    onTap: _pickOperatingStartTime,
+                    prefixIcon: const Icon(Icons.schedule_outlined),
+                    suffixIcon: IconButton(
+                      onPressed: _pickOperatingStartTime,
+                      icon: const Icon(Icons.access_time_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  AppTextField(
+                    controller: _operatingEndTimeController,
+                    label: 'End Time',
+                    hint: 'Select end time',
+                    readOnly: true,
+                    onTap: _pickOperatingEndTime,
+                    prefixIcon: const Icon(Icons.schedule_outlined),
+                    suffixIcon: IconButton(
+                      onPressed: _pickOperatingEndTime,
+                      icon: const Icon(Icons.access_time_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  const Text(
+                    'Leave blank to keep the current schedule, or fill all four fields together.',
+                    style: TextStyle(color: AppColors.mist, height: 1.5),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   AppTextField(
@@ -251,7 +379,7 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
                   ),
                   const SizedBox(height: AppSpacing.md),
                   DropdownButtonFormField<String>(
-                    value: _status,
+                    initialValue: _status,
                     decoration: const InputDecoration(
                       labelText: 'Hub Status',
                       prefixIcon: Icon(Icons.verified_outlined),
@@ -299,6 +427,116 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
       return trimmed.isEmpty ? fallback : trimmed;
     }
     return fallback;
+  }
+
+  static TimeOfDay? _readTimeOfDay(dynamic value) {
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) {
+        return null;
+      }
+
+      final parts = trimmed.split(':');
+      if (parts.length == 2) {
+        final hour = int.tryParse(parts[0]);
+        final minute = int.tryParse(parts[1]);
+        if (hour != null && minute != null) {
+          return TimeOfDay(hour: hour, minute: minute);
+        }
+      }
+    }
+    return null;
+  }
+
+  void _syncOperatingScheduleControllers() {
+    _operatingStartTimeController.text = _formatTime(_operatingStartTime);
+    _operatingEndTimeController.text = _formatTime(_operatingEndTime);
+  }
+
+  bool _hasAnyOperatingScheduleInput() {
+    return _operatingStartDay.trim().isNotEmpty ||
+        _operatingEndDay.trim().isNotEmpty ||
+        _operatingStartTime != null ||
+        _operatingEndTime != null;
+  }
+
+  bool _hasCompleteOperatingSchedule() {
+    return _operatingStartDay.trim().isNotEmpty &&
+        _operatingEndDay.trim().isNotEmpty &&
+        _operatingStartTime != null &&
+        _operatingEndTime != null;
+  }
+
+  String _formatTime(TimeOfDay? value) {
+    if (value == null) {
+      return '';
+    }
+    return MaterialLocalizations.of(context).formatTimeOfDay(value);
+  }
+
+  String _formatTimeForStorage(TimeOfDay value) {
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  String _formatOperatingHoursRange(BuildContext context) {
+    final startDay = _operatingStartDay.trim();
+    final endDay = _operatingEndDay.trim();
+    final startTime = _operatingStartTime;
+    final endTime = _operatingEndTime;
+    if (startDay.isEmpty ||
+        endDay.isEmpty ||
+        startTime == null ||
+        endTime == null) {
+      return _legacyOperatingHours;
+    }
+
+    final localizations = MaterialLocalizations.of(context);
+    final startTimeText = localizations.formatTimeOfDay(startTime);
+    final endTimeText = localizations.formatTimeOfDay(endTime);
+    return '${_shortDayLabel(startDay)}-${_shortDayLabel(endDay)}, $startTimeText - $endTimeText';
+  }
+
+  Future<void> _pickOperatingStartTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _operatingStartTime ?? const TimeOfDay(hour: 9, minute: 0),
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _operatingStartTime = picked;
+      _operatingStartTimeController.text = _formatTime(picked);
+    });
+  }
+
+  Future<void> _pickOperatingEndTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _operatingEndTime ?? const TimeOfDay(hour: 17, minute: 0),
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _operatingEndTime = picked;
+      _operatingEndTimeController.text = _formatTime(picked);
+    });
+  }
+
+  static String _shortDayLabel(String day) {
+    return switch (day.toLowerCase()) {
+      'monday' => 'Mon',
+      'tuesday' => 'Tue',
+      'wednesday' => 'Wed',
+      'thursday' => 'Thu',
+      'friday' => 'Fri',
+      'saturday' => 'Sat',
+      'sunday' => 'Sun',
+      _ => day,
+    };
   }
 }
 

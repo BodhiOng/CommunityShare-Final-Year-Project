@@ -133,7 +133,7 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
             recipientId: recipientId,
             recipientName: _displayNameForUser(usersById[recipientId]),
             recipientPhone: _phoneForUser(usersById[recipientId]),
-            recipientLocation: _locationForUser(usersById[recipientId]),
+            recipientAddress: _locationForUser(usersById[recipientId]),
             handoverType: data['handoverType']?.toString().trim() ?? '',
             hubId: hubId,
             hubName:
@@ -498,7 +498,12 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
 
   static String _locationForUser(Map<String, dynamic>? data) {
     if (data == null || data.isEmpty) {
-      return 'Location not provided';
+      return 'Address not provided';
+    }
+
+    final address = data['address']?.toString().trim() ?? '';
+    if (address.isNotEmpty) {
+      return address;
     }
 
     final parts = [
@@ -507,7 +512,7 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
       data['country']?.toString().trim() ?? '',
     ].where((value) => value.isNotEmpty).toList(growable: false);
 
-    return parts.isNotEmpty ? parts.join(', ') : 'Location not provided';
+    return parts.isNotEmpty ? parts.join(', ') : 'Address not provided';
   }
 
   static String _displayNameForHub(Map<String, dynamic>? data, String hubId) {
@@ -552,7 +557,7 @@ class DonorIncomingRequestRecord {
     required this.recipientId,
     required this.recipientName,
     required this.recipientPhone,
-    required this.recipientLocation,
+    required this.recipientAddress,
     required this.handoverType,
     required this.hubId,
     required this.hubName,
@@ -575,7 +580,8 @@ class DonorIncomingRequestRecord {
   final String recipientId;
   final String recipientName;
   final String recipientPhone;
-  final String recipientLocation;
+  final String recipientAddress;
+  String get recipientLocation => recipientAddress;
   final String handoverType;
   final String hubId;
   final String hubName;

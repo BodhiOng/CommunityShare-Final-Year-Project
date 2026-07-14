@@ -142,6 +142,12 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
     final request = widget.request;
     final canDecide = _requestStatus.toLowerCase() == 'pending';
     final canSelectHandover = _canSelectHandover(_requestStatus);
+    final canShowRecipientContact =
+        request.handoverType == 'independent_pickup' &&
+        _requestStatus.toLowerCase() != 'pending' &&
+        _requestStatus.toLowerCase() != 'rejected' &&
+        _requestStatus.toLowerCase() != 'cancelled' &&
+        _requestStatus.toLowerCase() != 'completed';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Request Details')),
@@ -221,8 +227,13 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _InfoRow(label: 'Recipient', value: request.recipientName),
-                  _InfoRow(label: 'Phone', value: request.recipientPhone),
-                  _InfoRow(label: 'Location', value: request.recipientLocation),
+                  if (canShowRecipientContact)
+                    _InfoRow(
+                      label: 'Recipient Phone',
+                      value: request.recipientPhone,
+                    ),
+                  if (canShowRecipientContact)
+                    _InfoRow(label: 'Address', value: request.recipientAddress),
                   _InfoRow(
                     label: 'Selected Method',
                     value:
@@ -232,13 +243,6 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
                   ),
                   if (request.handoverType == 'community_hub_pickup')
                     _InfoRow(label: 'Community Hub', value: request.hubName),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    request.handoverType == 'community_hub_pickup'
-                        ? 'The recipient chose community hub pickup for this request.'
-                        : 'The recipient chose independent pickup for this request.',
-                    style: const TextStyle(color: AppColors.mist, height: 1.5),
-                  ),
                   _InfoRow(
                     label: 'Requested',
                     value: _formatDateTime(request.requestedAt),
