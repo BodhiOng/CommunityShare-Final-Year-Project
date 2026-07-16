@@ -40,7 +40,6 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
   bool _isLoading = true;
   bool _isSaving = false;
   String _errorMessage = '';
-  String _status = 'active';
   String _hubDocId = '';
   String _hubId = '';
   String _legacyOperatingHours = '';
@@ -104,7 +103,6 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
       setState(() {
         _hubDocId = doc?.id ?? userId;
         _hubId = _stringValue(data['hubId'], fallback: doc?.id ?? userId);
-        _status = _stringValue(data['status'], fallback: 'active');
         _isLoading = false;
       });
     } catch (error) {
@@ -164,7 +162,6 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
             ? null
             : _formatTimeForStorage(_operatingEndTime!),
         'contactNumber': _contactNumberController.text.trim(),
-        'status': _status,
       }, SetOptions(merge: true));
 
       if (!mounted) {
@@ -217,7 +214,6 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
         _HubProfileHero(
           hubName: hubLabel,
           hubId: _hubId.isNotEmpty ? _hubId : _hubDocId,
-          status: _status,
         ),
         const SizedBox(height: AppSpacing.md),
         Card(
@@ -377,34 +373,6 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: AppSpacing.md),
-                  DropdownButtonFormField<String>(
-                    initialValue: _status,
-                    decoration: const InputDecoration(
-                      labelText: 'Hub Status',
-                      prefixIcon: Icon(Icons.verified_outlined),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'active',
-                        child: Text('Active'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'inactive',
-                        child: Text('Inactive'),
-                      ),
-                    ],
-                    onChanged: _isSaving
-                        ? null
-                        : (value) {
-                            if (value == null) {
-                              return;
-                            }
-                            setState(() {
-                              _status = value;
-                            });
-                          },
-                  ),
                   const SizedBox(height: AppSpacing.lg),
                   AppPrimaryButton(
                     label: 'Save Hub Profile',
@@ -544,12 +512,10 @@ class _HubProfileHero extends StatelessWidget {
   const _HubProfileHero({
     required this.hubName,
     required this.hubId,
-    required this.status,
   });
 
   final String hubName;
   final String hubId;
-  final String status;
 
   @override
   Widget build(BuildContext context) {
@@ -587,27 +553,6 @@ class _HubProfileHero extends StatelessWidget {
           Text(
             'Hub ID: ${hubId.isEmpty ? 'Not created yet' : hubId}',
             style: const TextStyle(color: AppColors.sand),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
-              vertical: AppSpacing.xs,
-            ),
-            decoration: BoxDecoration(
-              color: AppColors.white.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(
-                color: AppColors.white.withValues(alpha: 0.18),
-              ),
-            ),
-            child: Text(
-              'Status: ${status[0].toUpperCase()}${status.substring(1)}',
-              style: const TextStyle(
-                color: AppColors.sand,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
           ),
         ],
       ),

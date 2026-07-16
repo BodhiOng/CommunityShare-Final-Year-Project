@@ -200,17 +200,33 @@ class _DonorSelectHandoverPointPageState
         'completedAt': null,
       }, SetOptions(merge: true));
 
-      final historyId = _generateHistoryId();
-      final historyRef = _firestore
-          .collection('DONATION_STATUS_HISTORY')
-          .doc(historyId);
-      batch.set(historyRef, {
-        'statusHistoryId': historyId,
-        'requestId': widget.request.requestId,
-        'status': deliveryStatus,
-        'changedAt': FieldValue.serverTimestamp(),
-        'changedByUserId': donorId,
-      });
+      final latestHistorySnapshot =
+          await _firestore
+              .collection('DONATION_STATUS_HISTORY')
+              .where('requestId', isEqualTo: widget.request.requestId)
+              .orderBy('changedAt', descending: true)
+              .limit(1)
+              .get();
+      final latestStatus =
+          latestHistorySnapshot.docs.isNotEmpty
+              ? latestHistorySnapshot.docs.first.data()['status']
+                    ?.toString()
+                    .trim()
+                    .toLowerCase()
+              : '';
+      if (latestStatus != deliveryStatus.toLowerCase()) {
+        final historyId = _generateHistoryId();
+        final historyRef = _firestore
+            .collection('DONATION_STATUS_HISTORY')
+            .doc(historyId);
+        batch.set(historyRef, {
+          'statusHistoryId': historyId,
+          'requestId': widget.request.requestId,
+          'status': deliveryStatus,
+          'changedAt': FieldValue.serverTimestamp(),
+          'changedByUserId': donorId,
+        });
+      }
 
       await batch.commit();
 
@@ -380,6 +396,7 @@ class _DonorSelectHandoverPointPageState
         _canSaveHandover() &&
         !(_handoverType == 'community_hub_pickup' &&
             (_selectedHubId == null || _selectedHubId!.isEmpty));
+    final isDeliveryLocked = _isDeliveryLocked();
 
     return Scaffold(
       appBar: AppBar(
@@ -464,7 +481,11 @@ class _DonorSelectHandoverPointPageState
                             ),
                           )
                           : Text(
-                            _isEditing ? 'Save Changes' : 'Confirm Handover',
+                            isDeliveryLocked
+                                ? 'Handover Confirmed'
+                                : _isEditing
+                                ? 'Save Changes'
+                                : 'Confirm Handover',
                           ),
                 ),
               ),
@@ -534,10 +555,25 @@ class _DonorSelectHandoverPointPageState
   }
 
   bool _canSaveHandover() {
+    if (_isDeliveryLocked()) {
+      return false;
+    }
     if (_isIndependentClaimed()) {
       return false;
     }
     return true;
+  }
+
+  bool _isDeliveryLocked() {
+    final requestStatus = _requestStatus.toLowerCase();
+    final handoverStatus = _handoverStatus.toLowerCase();
+    return _isEditing &&
+        ((_handoverType == 'independent_pickup' &&
+                (requestStatus == 'delivering_to_recipient' ||
+                    handoverStatus == 'delivering_to_recipient')) ||
+            (_handoverType == 'community_hub_pickup' &&
+                (requestStatus == 'delivering_to_hub' ||
+                    handoverStatus == 'delivering_to_hub')));
   }
 }
 

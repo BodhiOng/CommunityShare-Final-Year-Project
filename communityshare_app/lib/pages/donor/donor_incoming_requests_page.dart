@@ -502,17 +502,7 @@ class _DonorIncomingRequestsPageState extends State<DonorIncomingRequestsPage> {
     }
 
     final address = data['address']?.toString().trim() ?? '';
-    if (address.isNotEmpty) {
-      return address;
-    }
-
-    final parts = [
-      data['city']?.toString().trim() ?? '',
-      data['state']?.toString().trim() ?? '',
-      data['country']?.toString().trim() ?? '',
-    ].where((value) => value.isNotEmpty).toList(growable: false);
-
-    return parts.isNotEmpty ? parts.join(', ') : 'Address not provided';
+    return address.isNotEmpty ? address : 'Address not provided';
   }
 
   static String _displayNameForHub(Map<String, dynamic>? data, String hubId) {

@@ -29,12 +29,62 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
   bool _isUpdating = false;
   late String _requestStatus;
   late String _availabilityStatus;
+  String _handoverStatus = '';
 
   @override
   void initState() {
     super.initState();
     _requestStatus = widget.request.requestStatus;
     _availabilityStatus = widget.request.availabilityStatus;
+    _loadLatestState();
+  }
+
+  Future<void> _loadLatestState() async {
+    try {
+      final requestSnapshot =
+          await _firestore
+              .collection('ITEM_REQUEST')
+              .doc(widget.request.docId)
+              .get();
+      final requestData = requestSnapshot.data() ?? const <String, dynamic>{};
+      final handoverSnapshot =
+          await _firestore
+              .collection('HANDOVER')
+              .where('requestId', isEqualTo: widget.request.requestId)
+              .limit(1)
+              .get();
+
+      String availabilityStatus = widget.request.availabilityStatus;
+      if (widget.request.itemDocId.isNotEmpty) {
+        final itemSnapshot =
+            await _firestore
+                .collection('ITEM_LISTING')
+                .doc(widget.request.itemDocId)
+                .get();
+        availabilityStatus =
+            itemSnapshot.data()?['availabilityStatus']?.toString().trim() ??
+            availabilityStatus;
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _requestStatus =
+            requestData['requestStatus']?.toString().trim() ?? _requestStatus;
+        _handoverStatus =
+            handoverSnapshot.docs.isNotEmpty
+                ? handoverSnapshot.docs.first.data()['handoverStatus']
+                      ?.toString()
+                      .trim() ??
+                    ''
+                : '';
+        _availabilityStatus = availabilityStatus;
+      });
+    } catch (_) {
+      // Keep the page usable with the snapshot data we already have.
+    }
   }
 
   Future<void> _updateRequestStatus(String nextStatus) async {
@@ -140,14 +190,21 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
   @override
   Widget build(BuildContext context) {
     final request = widget.request;
-    final canDecide = _requestStatus.toLowerCase() == 'pending';
+    final requestStatus = _requestStatus.toLowerCase();
+    final handoverStatus = _handoverStatus.toLowerCase();
+    final canDecide =
+        requestStatus == 'pending' &&
+        handoverStatus != 'delivering_to_hub' &&
+        handoverStatus != 'delivering_to_recipient' &&
+        handoverStatus != 'item_at_community_hub' &&
+        handoverStatus != 'completed';
     final canSelectHandover = _canSelectHandover(_requestStatus);
     final canShowRecipientContact =
         request.handoverType == 'independent_pickup' &&
-        _requestStatus.toLowerCase() != 'pending' &&
-        _requestStatus.toLowerCase() != 'rejected' &&
-        _requestStatus.toLowerCase() != 'cancelled' &&
-        _requestStatus.toLowerCase() != 'completed';
+        requestStatus != 'pending' &&
+        requestStatus != 'rejected' &&
+        requestStatus != 'cancelled' &&
+        requestStatus != 'completed';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Request Details')),
@@ -185,11 +242,6 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          'Request ID: ${request.requestId}',
-                          style: const TextStyle(color: AppColors.mist),
-                        ),
                         const SizedBox(height: AppSpacing.sm),
                         Wrap(
                           spacing: AppSpacing.sm,
@@ -226,6 +278,7 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
+                  _InfoRow(label: 'Request ID', value: request.requestId),
                   _InfoRow(label: 'Recipient', value: request.recipientName),
                   if (canShowRecipientContact)
                     _InfoRow(
@@ -336,24 +389,6 @@ class _DonorRequestDetailsPageState extends State<DonorRequestDetailsPage> {
                       label: const Text('Confirm Handover Method'),
                     ),
                   ),
-                  if (!canSelectHandover) ...[
-                    const SizedBox(height: AppSpacing.sm),
-                    const Text(
-                      'Approve the request first before confirming the selected handover method.',
-                      style: TextStyle(color: AppColors.mist),
-                    ),
-                  ] else ...[
-                    const SizedBox(height: AppSpacing.sm),
-                    Text(
-                      request.handoverType == 'community_hub_pickup'
-                          ? 'Approve, or reject if you do not want to use the donor-configured community hub.'
-                          : 'Approve, or reject if you do not want to continue with independent pickup.',
-                      style: const TextStyle(
-                        color: AppColors.mist,
-                        height: 1.5,
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),

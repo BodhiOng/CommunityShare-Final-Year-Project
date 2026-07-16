@@ -27,7 +27,6 @@ class _HubHandoverConfirmationPageState
   String _hubId = '';
   String _hubName = '';
   bool _showFilters = false;
-  String? _savingRequestId;
   List<HubHandoverRecord> _requests = const [];
   List<HubHandoverRecord> _filteredRequests = const [];
   int _currentPage = 0;
@@ -54,7 +53,6 @@ class _HubHandoverConfirmationPageState
     setState(() {
       _isLoading = true;
       _errorMessage = '';
-      _savingRequestId = null;
     });
 
     try {
@@ -88,7 +86,6 @@ class _HubHandoverConfirmationPageState
           _hubId = '';
           _hubName = '';
           _requests = const [];
-          _savingRequestId = null;
           _isLoading = false;
         });
         return;
@@ -214,7 +211,6 @@ class _HubHandoverConfirmationPageState
         _requests = records;
         _filteredRequests = _applyFilters(records);
         _currentPage = 0;
-        _savingRequestId = null;
         _isLoading = false;
       });
     } catch (error) {
@@ -357,10 +353,6 @@ class _HubHandoverConfirmationPageState
       return false;
     }
 
-    setState(() {
-      _savingRequestId = record.requestId;
-    });
-
     try {
       final batch = _firestore.batch();
 
@@ -422,9 +414,6 @@ class _HubHandoverConfirmationPageState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Unable to update handover status: $error')),
       );
-      setState(() {
-        _savingRequestId = null;
-      });
       return false;
     }
   }
@@ -564,7 +553,6 @@ class _HubHandoverConfirmationPageState
         builder: (_) => _HubHandoverDetailsPage(
           request: request,
           hubName: _hubName,
-          isSaving: _savingRequestId == request.requestId,
           onConfirmReceived: _confirmReceived,
           onConfirmClaimed: _confirmClaimed,
         ),
@@ -913,6 +901,39 @@ class HubHandoverRecord {
   final String handoverId;
   final String handoverStatus;
   final String handoverType;
+
+  HubHandoverRecord copyWith({
+    String? availabilityStatus,
+    String? requestStatus,
+    DateTime? updatedAt,
+    String? handoverStatus,
+  }) {
+    return HubHandoverRecord(
+      requestId: requestId,
+      docId: docId,
+      itemId: itemId,
+      itemDocId: itemDocId,
+      itemTitle: itemTitle,
+      itemPhotoUrl: itemPhotoUrl,
+      itemCategory: itemCategory,
+      itemQuantity: itemQuantity,
+      availabilityStatus: availabilityStatus ?? this.availabilityStatus,
+      donorId: donorId,
+      donorName: donorName,
+      donorPhone: donorPhone,
+      recipientId: recipientId,
+      recipientName: recipientName,
+      recipientPhone: recipientPhone,
+      hubId: hubId,
+      requestStatus: requestStatus ?? this.requestStatus,
+      requestNote: requestNote,
+      requestedAt: requestedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      handoverId: handoverId,
+      handoverStatus: handoverStatus ?? this.handoverStatus,
+      handoverType: handoverType,
+    );
+  }
 }
 
 class _HandoverCard extends StatelessWidget {
@@ -1008,23 +1029,89 @@ class _HandoverCard extends StatelessWidget {
   }
 }
 
-class _HubHandoverDetailsPage extends StatelessWidget {
+class _HubHandoverDetailsPage extends StatefulWidget {
   const _HubHandoverDetailsPage({
     required this.request,
     required this.hubName,
-    required this.isSaving,
     required this.onConfirmReceived,
     required this.onConfirmClaimed,
   });
 
   final HubHandoverRecord request;
   final String hubName;
-  final bool isSaving;
   final Future<bool> Function(HubHandoverRecord record) onConfirmReceived;
   final Future<bool> Function(HubHandoverRecord record) onConfirmClaimed;
 
   @override
+  State<_HubHandoverDetailsPage> createState() => _HubHandoverDetailsPageState();
+}
+
+class _HubHandoverDetailsPageState extends State<_HubHandoverDetailsPage> {
+  late HubHandoverRecord _request = widget.request;
+  bool _isSaving = false;
+
+  Future<void> _handleConfirmReceived() async {
+    if (_isSaving) {
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      final changed = await widget.onConfirmReceived(_request);
+      if (!mounted) {
+        return;
+      }
+      if (changed) {
+        setState(() {
+          _request = _request.copyWith(
+            requestStatus: 'item_at_community_hub',
+            handoverStatus: 'item_at_community_hub',
+            availabilityStatus: 'reserved',
+            updatedAt: DateTime.now(),
+          );
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleConfirmClaimed() async {
+    if (_isSaving) {
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      final changed = await widget.onConfirmClaimed(_request);
+      if (!mounted) {
+        return;
+      }
+      if (changed) {
+        Navigator.of(context).pop(true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final request = _request;
     final effectiveStatus =
         _HubHandoverConfirmationPageState._effectiveStatus(request);
     final canConfirmReceived = effectiveStatus == 'delivering_to_hub';
@@ -1096,7 +1183,12 @@ class _HubHandoverDetailsPage extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: AppSpacing.lg),
-                  _InfoLine(label: 'Hub', value: hubName.isNotEmpty ? hubName : 'Community Hub'),
+                  _InfoLine(
+                    label: 'Hub',
+                    value: widget.hubName.isNotEmpty
+                        ? widget.hubName
+                        : 'Community Hub',
+                  ),
                   _InfoLine(label: 'Recipient', value: request.recipientName),
                   _InfoLine(label: 'Recipient Phone', value: request.recipientPhone),
                   _InfoLine(label: 'Donor', value: request.donorName),
@@ -1112,18 +1204,13 @@ class _HubHandoverDetailsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          if (isSaving)
+          if (_isSaving)
             const AppLoadingState(message: 'Updating handover...')
           else if (canConfirmReceived)
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () async {
-                  final changed = await onConfirmReceived(request);
-                  if (changed && context.mounted) {
-                    Navigator.of(context).pop(true);
-                  }
-                },
+                onPressed: _handleConfirmReceived,
                 icon: const Icon(Icons.inventory_rounded),
                 label: const Text('Mark Received by Hub'),
               ),
@@ -1132,12 +1219,7 @@ class _HubHandoverDetailsPage extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () async {
-                  final changed = await onConfirmClaimed(request);
-                  if (changed && context.mounted) {
-                    Navigator.of(context).pop(true);
-                  }
-                },
+                onPressed: _handleConfirmClaimed,
                 icon: const Icon(Icons.assignment_turned_in_outlined),
                 label: const Text('Mark Claimed by Recipient'),
               ),

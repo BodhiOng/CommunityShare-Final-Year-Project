@@ -22,6 +22,7 @@ class _DonorDonationStatusTrackingPageState
 
   bool _isLoading = true;
   String _errorMessage = '';
+  bool _isCancellingDelivery = false;
   _TrackingSnapshot? _snapshot;
 
   @override
@@ -99,6 +100,7 @@ class _DonorDonationStatusTrackingPageState
         final right = b.changedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
         return left.compareTo(right);
       });
+      final dedupedTimeline = _dedupeTimeline(timeline);
 
       if (!mounted) {
         return;
@@ -132,7 +134,7 @@ class _DonorDonationStatusTrackingPageState
               requestData['handoverType']?.toString().trim() ??
               widget.request.handoverType,
           completedAt: _readDateTime(handoverData?['completedAt']),
-          timeline: timeline,
+          timeline: dedupedTimeline,
         );
         _isLoading = false;
       });
@@ -145,6 +147,138 @@ class _DonorDonationStatusTrackingPageState
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _cancelDelivery(_TrackingSnapshot snapshot) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Cancel delivery?'),
+            content: const Text(
+              'This will cancel the independent pickup delivery, return the listing to available, and mark the request as cancelled.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Keep delivery'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Cancel delivery'),
+              ),
+            ],
+          ),
+    );
+
+    if (confirm != true) {
+      return;
+    }
+
+    setState(() {
+      _isCancellingDelivery = true;
+    });
+
+    try {
+      final requestRef =
+          _firestore.collection('ITEM_REQUEST').doc(widget.request.docId);
+      final handoverQuery =
+          await _firestore
+              .collection('HANDOVER')
+              .where('requestId', isEqualTo: widget.request.requestId)
+              .limit(1)
+              .get();
+      final handoverRef = snapshot.handoverId.isNotEmpty
+          ? _firestore.collection('HANDOVER').doc(snapshot.handoverId)
+          : handoverQuery.docs.isNotEmpty
+          ? handoverQuery.docs.first.reference
+          : null;
+
+      DocumentReference<Map<String, dynamic>>? itemRef;
+      if (widget.request.itemDocId.isNotEmpty) {
+        itemRef =
+            _firestore.collection('ITEM_LISTING').doc(widget.request.itemDocId);
+      } else if (widget.request.itemId.isNotEmpty) {
+        final itemSnapshot =
+            await _firestore
+                .collection('ITEM_LISTING')
+                .where('itemId', isEqualTo: widget.request.itemId)
+                .limit(1)
+                .get();
+        if (itemSnapshot.docs.isNotEmpty) {
+          itemRef = itemSnapshot.docs.first.reference;
+        }
+      }
+
+      final batch = _firestore.batch();
+      batch.update(requestRef, {
+        'requestStatus': 'cancelled',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (itemRef != null) {
+        batch.update(itemRef, {
+          'availabilityStatus': 'available',
+        });
+      }
+
+      if (handoverRef != null) {
+        batch.set(
+          handoverRef,
+          {
+            'handoverStatus': 'cancelled',
+            'cancelledAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+
+      final historyRef = _firestore
+          .collection('DONATION_STATUS_HISTORY')
+          .doc('status_${DateTime.now().millisecondsSinceEpoch}');
+      batch.set(historyRef, {
+        'statusHistoryId': historyRef.id,
+        'requestId': widget.request.requestId,
+        'status': 'cancelled',
+        'changedAt': FieldValue.serverTimestamp(),
+        'changedByUserId': 'donor',
+      });
+
+      await batch.commit();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Delivery canceled.')),
+      );
+      await _loadTracking();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to cancel delivery: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCancellingDelivery = false;
+        });
+      }
+    }
+  }
+
+  bool _canCancelDelivery(_TrackingSnapshot snapshot) {
+    final requestStatus = snapshot.requestStatus.toLowerCase();
+    final handoverStatus = snapshot.handoverStatus.toLowerCase();
+    return snapshot.handoverType == 'independent_pickup' &&
+        requestStatus != 'completed' &&
+        requestStatus != 'rejected' &&
+        requestStatus != 'cancelled' &&
+        handoverStatus == 'delivering_to_recipient';
   }
 
   AppBar _buildAppBar() {
@@ -171,6 +305,7 @@ class _DonorDonationStatusTrackingPageState
     }
 
     final snapshot = _snapshot!;
+    final canCancelDelivery = _canCancelDelivery(snapshot);
     final canShowRecipientContact =
         snapshot.handoverType == 'independent_pickup' &&
         snapshot.requestStatus.toLowerCase() != 'pending' &&
@@ -270,6 +405,35 @@ class _DonorDonationStatusTrackingPageState
                         ],
                       ),
             ),
+            if (canCancelDelivery) ...[
+              const SizedBox(height: AppSpacing.md),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed:
+                      _isCancellingDelivery
+                          ? null
+                          : () => _cancelDelivery(snapshot),
+                  icon:
+                      _isCancellingDelivery
+                          ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                          : const Icon(Icons.cancel_outlined),
+                  label: Text(
+                    _isCancellingDelivery
+                        ? 'Canceling delivery...'
+                        : 'Cancel Delivery',
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                    foregroundColor: AppColors.coral,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -286,6 +450,9 @@ class _DonorDonationStatusTrackingPageState
             : snapshot.handoverStatus.toLowerCase();
     if (requestStatus == 'completed' || handoverStatus == 'completed') {
       return 'Donation lifecycle is complete.';
+    }
+    if (requestStatus == 'cancelled' || handoverStatus == 'cancelled') {
+      return 'Delivery was canceled.';
     }
     if (snapshot.handoverId.isEmpty) {
       return 'Confirm the recipient-selected handover method and continue the flow.';
@@ -320,6 +487,21 @@ class _DonorDonationStatusTrackingPageState
       return 'Not set';
     }
     return DateFormat('MMM d, yyyy h:mm a').format(value);
+  }
+
+  static List<_StatusHistoryEntry> _dedupeTimeline(
+    List<_StatusHistoryEntry> timeline,
+  ) {
+    final deduped = <_StatusHistoryEntry>[];
+    for (final entry in timeline) {
+      final normalizedStatus = entry.status.toLowerCase();
+      if (deduped.isNotEmpty &&
+          deduped.last.status.toLowerCase() == normalizedStatus) {
+        continue;
+      }
+      deduped.add(entry);
+    }
+    return deduped;
   }
 }
 
@@ -388,6 +570,11 @@ class _HeroPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final normalizedRequestStatus = requestStatus.toLowerCase();
+    final normalizedHandoverStatus = handoverStatus.toLowerCase();
+    final showHandoverStatus =
+        normalizedHandoverStatus.isNotEmpty &&
+        normalizedHandoverStatus != normalizedRequestStatus;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
@@ -436,11 +623,11 @@ class _HeroPanel extends StatelessWidget {
                 label: 'Listing ${titleCaseLabel(listingStatus)}',
                 color: AppColors.sun,
               ),
-              if (handoverStatus.isNotEmpty)
+              if (showHandoverStatus)
                 _StatusChip(
                   label: 'Handover ${titleCaseLabel(handoverStatus)}',
                   color:
-                      handoverStatus.toLowerCase() == 'completed'
+                      normalizedHandoverStatus == 'completed'
                           ? AppColors.mint
                           : AppColors.sand,
                 ),

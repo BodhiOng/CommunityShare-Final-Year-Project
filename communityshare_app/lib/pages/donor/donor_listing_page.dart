@@ -716,13 +716,6 @@ class _DonationCard extends StatelessWidget {
                         SizedBox(
                           width: chipWidth,
                           child: _MetaChip(
-                            icon: Icons.inventory_2_outlined,
-                            label: 'Qty ${item.quantity}',
-                          ),
-                        ),
-                        SizedBox(
-                          width: chipWidth,
-                          child: _MetaChip(
                             icon: Icons.toggle_on_outlined,
                             label: _titleCase(item.availabilityStatus),
                           ),
@@ -745,18 +738,6 @@ class _DonationCard extends StatelessWidget {
                     );
                   },
                 ),
-                if (item.allowsCommunityHubPickup &&
-                    item.hubName.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    'Hub pickup: ${item.hubName}',
-                    style: const TextStyle(
-                      color: AppColors.mist,
-                      fontSize: 12,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
                 const SizedBox(height: AppSpacing.lg),
                 Container(
                   height: 1,
@@ -779,7 +760,7 @@ class _DonationCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                if (item.availabilityStatus.toLowerCase() != 'deactivated')
+                if (!_isEditLockedStatus(item.availabilityStatus))
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton.icon(
@@ -795,7 +776,7 @@ class _DonationCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                if (item.expiryDate != null) ...[
+                if (item.expiryDate != null && item.category != 'consumables') ...[
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     'Expiry ${_formatDate(item.expiryDate!)}',
@@ -963,16 +944,8 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
     _CategoryOption('others', 'Others'),
   ];
 
-  final List<String> _availabilityStatuses = const [
-    'available',
-    'reserved',
-    'claimed',
-    'expired',
-  ];
-
   late String _selectedCondition;
   late String _selectedCategoryId;
-  late String _selectedAvailabilityStatus;
   late bool _allowsIndependentPickup;
   late bool _allowsCommunityHubPickup;
   File? _imageFile;
@@ -996,10 +969,6 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
         _conditions.contains(item?.condition) ? item!.condition : 'Good';
     _selectedCategoryId = _normalizeCategoryId(item?.category);
     _photoUrl = item?.photoUrl ?? '';
-    _selectedAvailabilityStatus =
-        _availabilityStatuses.contains(item?.availabilityStatus)
-            ? item!.availabilityStatus
-            : 'available';
     _allowsIndependentPickup = item?.allowsIndependentPickup ?? true;
     _allowsCommunityHubPickup = item?.allowsCommunityHubPickup ?? false;
     _selectedHubId = item?.hubId.isNotEmpty == true ? item!.hubId : null;
@@ -1157,6 +1126,11 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
       _errorMessage = null;
     });
 
+    final availabilityStatus =
+        _isEditing
+            ? widget.item?.availabilityStatus ?? 'available'
+            : 'available';
+
     try {
       final donorId = _auth.currentUser?.uid;
       if (donorId == null) {
@@ -1182,7 +1156,7 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
       }
 
       final payload = <String, dynamic>{
-        'availabilityStatus': _selectedAvailabilityStatus,
+        'availabilityStatus': availabilityStatus,
         'allowsCommunityHubPickup': _allowsCommunityHubPickup,
         'allowsIndependentPickup': _allowsIndependentPickup,
         'category': _selectedCategoryId,
@@ -1459,26 +1433,15 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
                     ],
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  DropdownButtonFormField<String>(
-                    initialValue: _selectedAvailabilityStatus,
+                  InputDecorator(
                     decoration: const InputDecoration(
                       labelText: 'Availability Status',
                     ),
-                    items:
-                        _availabilityStatuses
-                            .map(
-                              (status) => DropdownMenuItem<String>(
-                                value: status,
-                                child: Text(_titleCase(status)),
-                              ),
-                            )
-                            .toList(),
-                    onChanged: (value) {
-                      if (value == null) {
-                        return;
-                      }
-                      setState(() => _selectedAvailabilityStatus = value);
-                    },
+                    child: Text(
+                      _isEditing
+                          ? _titleCase(widget.item?.availabilityStatus ?? 'available')
+                          : 'Available',
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   Container(
@@ -1700,7 +1663,7 @@ String _categoryLabel(String category) {
 
 String _handoverMethodsLabel(DonorListingItem item) {
   if (item.allowsIndependentPickup && item.allowsCommunityHubPickup) {
-    return 'Both methods';
+    return 'Both';
   }
   if (item.allowsCommunityHubPickup) {
     return 'Hub pickup';
@@ -1736,4 +1699,16 @@ String _titleCase(String value) {
       .where((part) => part.isNotEmpty)
       .map((part) => part[0].toUpperCase() + part.substring(1).toLowerCase())
       .join(' ');
+}
+
+bool _isEditLockedStatus(String status) {
+  switch (status.toLowerCase()) {
+    case 'claimed':
+    case 'reserved':
+    case 'expired':
+    case 'deactivated':
+      return true;
+    default:
+      return false;
+  }
 }

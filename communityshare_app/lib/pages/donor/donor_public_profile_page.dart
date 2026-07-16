@@ -136,8 +136,6 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
               roleLabel: _donorRoleLabel,
               statusLabel: _donorStatusLabel,
               bio: _donorBio,
-              location: _donorLocation,
-              phone: _donorPhoneLabel,
               profileImageUrl: _donorProfileImageUrl,
             ),
           const SizedBox(height: AppSpacing.lg),
@@ -231,36 +229,6 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
 
   String get _donorBio {
     return (_donorData?['bio'] as String?)?.trim() ?? '';
-  }
-
-  String get _donorLocation {
-    final city = (_donorData?['city'] as String?)?.trim();
-    final state = (_donorData?['state'] as String?)?.trim();
-    final country = (_donorData?['country'] as String?)?.trim();
-    final parts = <String>[
-      if (city != null && city.isNotEmpty) city,
-      if (state != null && state.isNotEmpty) state,
-      if (country != null && country.isNotEmpty) country,
-    ];
-
-    return parts.isEmpty ? 'Location not provided' : parts.join(', ');
-  }
-
-  String get _donorPhoneLabel {
-    final phone = (_donorData?['phoneNumber'] as String?)?.trim();
-    final phoneCode = (_donorData?['phoneCountryCode'] as String?)?.trim();
-    final localPhone = (_donorData?['phoneLocalNumber'] as String?)?.trim();
-
-    if (phone != null && phone.isNotEmpty) {
-      return phone;
-    }
-
-    final combined = [
-      if (phoneCode != null && phoneCode.isNotEmpty) phoneCode,
-      if (localPhone != null && localPhone.isNotEmpty) localPhone,
-    ].join(' ').trim();
-
-    return combined.isNotEmpty ? combined : 'Phone not provided';
   }
 
   String get _donorRoleLabel {
@@ -364,8 +332,6 @@ class _DonorHeroCard extends StatelessWidget {
     required this.roleLabel,
     required this.statusLabel,
     required this.bio,
-    required this.location,
-    required this.phone,
     required this.profileImageUrl,
   });
 
@@ -374,8 +340,6 @@ class _DonorHeroCard extends StatelessWidget {
   final String roleLabel;
   final String statusLabel;
   final String bio;
-  final String location;
-  final String phone;
   final String profileImageUrl;
 
   @override
@@ -448,10 +412,6 @@ class _DonorHeroCard extends StatelessWidget {
               _HeroChip(label: 'Status: $statusLabel'),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
-          _InfoLine(icon: Icons.location_on_outlined, value: location),
-          const SizedBox(height: AppSpacing.xs),
-          _InfoLine(icon: Icons.phone_outlined, value: phone),
           if (bio.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.md),
             Text(

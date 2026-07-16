@@ -455,13 +455,6 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),
-                                      const SizedBox(height: AppSpacing.xs),
-                                      Text(
-                                        _donorLocation,
-                                        style: const TextStyle(
-                                          color: AppColors.mist,
-                                        ),
-                                      ),
                                     ],
                                   ),
                                 ),
@@ -489,10 +482,6 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                                 _DetailPill(
                                   label: _donorRoleLabel,
                                   color: AppColors.pine,
-                                ),
-                                _DetailPill(
-                                  label: _donorPhoneLabel,
-                                  color: AppColors.forest,
                                 ),
                               ],
                             ),
@@ -885,45 +874,6 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     }
 
     return '';
-  }
-
-  String get _donorLocation {
-    final city = (_donorData?['city'] as String?)?.trim();
-    final state = (_donorData?['state'] as String?)?.trim();
-    final country = (_donorData?['country'] as String?)?.trim();
-    final parts = <String>[
-      if (city != null && city.isNotEmpty) city,
-      if (state != null && state.isNotEmpty) state,
-      if (country != null && country.isNotEmpty) country,
-    ];
-
-    if (parts.isEmpty) {
-      return 'Location not provided';
-    }
-
-    return parts.join(', ');
-  }
-
-  String get _donorPhoneLabel {
-    final phone = (_donorData?['phoneNumber'] as String?)?.trim();
-    final phoneCode = (_donorData?['phoneCountryCode'] as String?)?.trim();
-    final localPhone = (_donorData?['phoneLocalNumber'] as String?)?.trim();
-
-    if (phone != null && phone.isNotEmpty) {
-      return phone;
-    }
-
-    final combined =
-        [
-          if (phoneCode != null && phoneCode.isNotEmpty) phoneCode,
-          if (localPhone != null && localPhone.isNotEmpty) localPhone,
-        ].join(' ').trim();
-
-    if (combined.isNotEmpty) {
-      return combined;
-    }
-
-    return 'Phone not provided';
   }
 
   String get _donorRoleLabel {

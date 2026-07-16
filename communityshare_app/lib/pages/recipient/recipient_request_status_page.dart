@@ -108,6 +108,7 @@ class _RecipientRequestStatusPageState
         final right = b.changedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
         return left.compareTo(right);
       });
+      final dedupedTimeline = _dedupeTimeline(timeline);
 
       if (!mounted) {
         return;
@@ -150,7 +151,7 @@ class _RecipientRequestStatusPageState
               requestData['handoverType']?.toString().trim() ??
               widget.request.handoverType,
           completedAt: _readDateTime(handoverData?['completedAt']),
-          timeline: timeline,
+          timeline: dedupedTimeline,
         );
         _isLoading = false;
       });
@@ -338,6 +339,10 @@ class _RecipientRequestStatusPageState
 
     final snapshot = _snapshot!;
     final canMarkReceived = _canMarkAsReceived(snapshot);
+    final canShowDonorPhone =
+        snapshot.listingStatus.toLowerCase() != 'claimed' &&
+        snapshot.requestStatus.toLowerCase() != 'completed' &&
+        snapshot.handoverStatus.toLowerCase() != 'completed';
     return Scaffold(
       appBar: AppBar(title: const Text('Request Status')),
       body: RefreshIndicator(
@@ -361,7 +366,8 @@ class _RecipientRequestStatusPageState
               child: Column(
                 children: [
                   _InfoRow(label: 'Donor', value: snapshot.donorName),
-                  _InfoRow(label: 'Phone', value: snapshot.donorPhone),
+                  if (canShowDonorPhone)
+                    _InfoRow(label: 'Phone', value: snapshot.donorPhone),
                   _InfoRow(label: 'Hub', value: snapshot.hubName),
                   _InfoRow(
                     label: 'Category',
@@ -510,6 +516,21 @@ class _RecipientRequestStatusPageState
       return 'Not set';
     }
     return DateFormat('MMM d, yyyy h:mm a').format(value);
+  }
+
+  static List<_StatusHistoryEntry> _dedupeTimeline(
+    List<_StatusHistoryEntry> timeline,
+  ) {
+    final deduped = <_StatusHistoryEntry>[];
+    for (final entry in timeline) {
+      final normalizedStatus = entry.status.toLowerCase();
+      if (deduped.isNotEmpty &&
+          deduped.last.status.toLowerCase() == normalizedStatus) {
+        continue;
+      }
+      deduped.add(entry);
+    }
+    return deduped;
   }
 
   static String _displayUserName(
@@ -679,6 +700,11 @@ class _HeroPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final normalizedRequestStatus = requestStatus.toLowerCase();
+    final normalizedHandoverStatus = handoverStatus.toLowerCase();
+    final showHandoverStatus =
+        normalizedHandoverStatus.isNotEmpty &&
+        normalizedHandoverStatus != normalizedRequestStatus;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
@@ -727,11 +753,11 @@ class _HeroPanel extends StatelessWidget {
                 label: 'Listing ${titleCaseLabel(listingStatus)}',
                 color: AppColors.sun,
               ),
-              if (handoverStatus.isNotEmpty)
+              if (showHandoverStatus)
                 _StatusChip(
                   label: 'Handover ${titleCaseLabel(handoverStatus)}',
                   color:
-                      handoverStatus.toLowerCase() == 'completed'
+                      normalizedHandoverStatus == 'completed'
                           ? AppColors.mint
                           : AppColors.sand,
                 ),

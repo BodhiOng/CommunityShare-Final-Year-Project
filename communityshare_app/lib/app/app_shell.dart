@@ -1464,13 +1464,7 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
   static String _locationForUser(Map<String, dynamic>? data) {
     if (data == null || data.isEmpty) return 'Address not provided';
     final address = data['address']?.toString().trim() ?? '';
-    if (address.isNotEmpty) return address;
-    final parts = [
-      data['city']?.toString().trim() ?? '',
-      data['state']?.toString().trim() ?? '',
-      data['country']?.toString().trim() ?? '',
-    ].where((v) => v.isNotEmpty).toList(growable: false);
-    return parts.isNotEmpty ? parts.join(', ') : 'Address not provided';
+    return address.isNotEmpty ? address : 'Address not provided';
   }
 
   static String _displayNameForHub(Map<String, dynamic>? data, String hubId) {

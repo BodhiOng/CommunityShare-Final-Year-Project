@@ -78,15 +78,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
   String _hubId = '';
   DateTime? _createdAt;
   List<_CountryOption> _countryOptions = const [];
-  List<String> _stateOptions = const [];
-  List<String> _cityOptions = const [];
-  String _selectedCountry = '';
-  String _selectedState = '';
-  String _selectedCity = '';
   String _selectedPhoneCountryCode = '';
-  String _pendingCountry = '';
-  String _pendingState = '';
-  String _pendingCity = '';
   String _pendingPhoneCountryCode = '';
   String _pendingHubContactNumber = '';
   String _legacyHubOperatingHours = '';
@@ -149,14 +141,14 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         _isLoadingLocationData = false;
       });
 
-      await _applyPendingLocationSelections();
+      _syncPhoneCountryCodeController();
     } catch (error) {
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _locationErrorMessage = 'Unable to load location options right now.';
+        _locationErrorMessage = 'Unable to load phone code options right now.';
         _isLoadingLocationData = false;
       });
     }
@@ -196,9 +188,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         data['address'],
         fallback: _stringValue(hubData['address']),
       );
-      _pendingCountry = _stringValue(data['country']);
-      _pendingState = _stringValue(data['state']);
-      _pendingCity = _stringValue(data['city']);
       _pendingPhoneCountryCode = _stringValue(data['phoneCountryCode']);
       _phoneController.text = _stripPhoneCountryCode(
         _phoneController.text,
@@ -232,7 +221,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         return;
       }
 
-      await _applyPendingLocationSelections();
+      _syncPhoneCountryCodeController();
       _syncHubOperatingScheduleControllers();
     } catch (error) {
       if (!mounted) {
@@ -278,38 +267,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       _profileImageFile = null;
       _profileImageUrl = '';
     });
-  }
-
-  Future<void> _applyPendingLocationSelections() async {
-    if (_countryOptions.isEmpty) {
-      _syncLocationControllers();
-      return;
-    }
-
-    final country = _resolveCountry(_pendingCountry);
-    final dialCode = _resolveDialCode(_pendingPhoneCountryCode, country);
-    final states = country.isNotEmpty ? await _fetchStates(country) : const <String>[];
-    final state = _resolveState(_pendingState, states);
-    final cities =
-        country.isNotEmpty && state.isNotEmpty
-            ? await _fetchCities(country, state)
-            : const <String>[];
-    final city = _resolveCity(_pendingCity, cities);
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _selectedCountry = country;
-      _selectedPhoneCountryCode = dialCode;
-      _stateOptions = states;
-      _selectedState = state;
-      _cityOptions = cities;
-      _selectedCity = city;
-    });
-    _syncLocationControllers();
-    _syncHubContactControllers();
   }
 
   Future<List<_CountryOption>> _fetchCountryOptions({
@@ -359,111 +316,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     return parsedCountries;
   }
 
-  Future<List<String>> _fetchStates(String country) async {
-    for (final option in _countryOptions) {
-      if (option.country == country) {
-        return option.states
-          .map((state) => state.name)
-          .where((item) => item.isNotEmpty)
-          .toSet()
-          .toList(growable: false)..sort();
-      }
-    }
-
-    return const [];
-  }
-
-  Future<List<String>> _fetchCities(String country, String state) async {
-    for (final option in _countryOptions) {
-      if (option.country == country) {
-        for (final region in option.states) {
-          if (region.name == state) {
-            return region.cities
-              .where((item) => item.isNotEmpty)
-              .toSet()
-              .toList(growable: false)..sort();
-          }
-        }
-      }
-    }
-
-    return const [];
-  }
-
-  Future<void> _setCountry(String value) async {
-    if (_countryOptions.isEmpty) {
-      return;
-    }
-
-    final country = _countryOptions.any((option) => option.country == value)
-        ? value
-        : '';
-    final dialCode = _resolveDialCode('', country);
-    final states = country.isNotEmpty ? await _fetchStates(country) : const <String>[];
-    final state = _resolveState(_selectedState, states);
-    final cities =
-        country.isNotEmpty && state.isNotEmpty
-            ? await _fetchCities(country, state)
-            : const <String>[];
-    final city = _resolveCity(_selectedCity, cities);
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _selectedCountry = country;
-      _selectedPhoneCountryCode = dialCode;
-      _stateOptions = states;
-      _selectedState = state;
-      _cityOptions = cities;
-      _selectedCity = city;
-    });
-    _syncLocationControllers();
-  }
-
-  Future<void> _setState(String value) async {
-    if (_selectedCountry.isEmpty) {
-      return;
-    }
-
-    final states = _stateOptions;
-    if (states.isEmpty) {
-      return;
-    }
-
-    final state = states.contains(value) ? value : '';
-    final cities =
-        state.isNotEmpty ? await _fetchCities(_selectedCountry, state) : const <String>[];
-    final city = _resolveCity(_selectedCity, cities);
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _selectedState = state;
-      _cityOptions = cities;
-      _selectedCity = city;
-    });
-    _syncLocationControllers();
-  }
-
-  void _setCity(String value) {
-    if (_cityOptions.isEmpty) {
-      return;
-    }
-
-    final city = _cityOptions.contains(value) ? value : '';
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _selectedCity = city;
-    });
-    _syncLocationControllers();
-  }
-
   Future<void> _setPhoneCountryCode(String value) async {
     if (_countryOptions.isEmpty) {
       return;
@@ -473,12 +325,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         _countryOptions.any((option) => option.dialCode == value)
             ? value
             : _countryOptions.first.dialCode;
-    final country = _countryForDialCode(code);
-    if (country.isNotEmpty) {
-      await _setCountry(country);
-      return;
-    }
-
     if (!mounted) {
       return;
     }
@@ -486,7 +332,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     setState(() {
       _selectedPhoneCountryCode = code;
     });
-    _syncLocationControllers();
+    _syncPhoneCountryCodeController();
   }
 
   Future<void> _setHubContactCountryCode(String value) async {
@@ -542,65 +388,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     throw const FormatException('Unexpected response format');
   }
 
-  String _resolveState(String? value, List<String> states) {
-    if (states.isEmpty) {
-      return '';
-    }
-
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isNotEmpty) {
-      for (final state in states) {
-        if (state.toLowerCase() == trimmed.toLowerCase()) {
-          return state;
-        }
-      }
-    }
-
-    return '';
-  }
-
-  String _resolveCity(String? value, List<String> cities) {
-    if (cities.isEmpty) {
-      return '';
-    }
-
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isNotEmpty) {
-      for (final city in cities) {
-        if (city.toLowerCase() == trimmed.toLowerCase()) {
-          return city;
-        }
-      }
-    }
-
-    return '';
-  }
-
-  String _resolveCountry(String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return '';
-    }
-
-    for (final option in _countryOptions) {
-      if (option.country.toLowerCase() == trimmed.toLowerCase()) {
-        return option.country;
-      }
-    }
-
-    return '';
-  }
-
-  String _countryForDialCode(String dialCode) {
-    for (final option in _countryOptions) {
-      if (option.dialCode == dialCode) {
-        return option.country;
-      }
-    }
-    return '';
-  }
-
-  void _syncLocationControllers() {
+  void _syncPhoneCountryCodeController() {
     _phoneCountryCodeController.text = _selectedPhoneCountryCode;
   }
 
@@ -621,23 +409,13 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     _hubOperatingEndTimeController.text = _formatTime(_hubOperatingEndTime);
   }
 
-  String _resolveDialCode(String? value, String country) {
+  String _resolveDialCode(String? value) {
     final trimmed = value?.trim() ?? '';
     if (trimmed.isNotEmpty &&
         _countryOptions.any((option) => option.dialCode == trimmed)) {
       return trimmed;
     }
-
-    if (country.isEmpty) {
-      return '';
-    }
-
-    return _countryOptions
-        .firstWhere(
-          (option) => option.country == country,
-          orElse: () => _countryOptions.first,
-        )
-        .dialCode;
+    return _countryOptions.isNotEmpty ? _countryOptions.first.dialCode : '';
   }
 
   static TimeOfDay? _readTimeOfDay(dynamic value) {
@@ -770,15 +548,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
   }
 
   bool _hasHubProfileRequirements() {
-    if (widget.role != UserRole.hub) {
-      return true;
-    }
-
-    return _hubNameController.text.trim().isNotEmpty &&
-        (_hasCompleteHubOperatingSchedule() ||
-            _legacyHubOperatingHours.trim().isNotEmpty) &&
-        _hubContactCountryCodeController.text.trim().isNotEmpty &&
-        _hubContactNumberController.text.trim().isNotEmpty;
+    return true;
   }
 
   bool _shouldBeActive() {
@@ -921,47 +691,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
           .collection('USER')
           .doc(user.uid)
           .set(payload, SetOptions(merge: true));
-
-      if (widget.role == UserRole.hub) {
-        final hubDocId = _hubDocId.isNotEmpty ? _hubDocId : user.uid;
-        final hubId = _hubId.isNotEmpty ? _hubId : hubDocId;
-        final hubContactNumber =
-            '${_hubContactCountryCodeController.text.trim()}${_hubContactNumberController.text.trim()}';
-        final hasAnyScheduleInput = _hasAnyHubOperatingScheduleInput();
-        final hasCompleteSchedule = _hasCompleteHubOperatingSchedule();
-
-        if (hasAnyScheduleInput && !hasCompleteSchedule) {
-          throw Exception(
-            'Fill start day, end day, start time, and end time together.',
-          );
-        }
-
-        final operatingHours =
-            hasCompleteSchedule
-                ? _formatOperatingHoursRange(context)
-                : _legacyHubOperatingHours;
-        await _firestore.collection('COMMUNITY_HUB').doc(hubDocId).set({
-          'hubId': hubId,
-          'userId': user.uid,
-          'hubName': _hubNameController.text.trim(),
-          'address': _addressController.text.trim(),
-          'operatingHours': operatingHours,
-          'operatingStartDay': _hubOperatingStartDay,
-          'operatingEndDay': _hubOperatingEndDay,
-          'operatingStartTime':
-              _hubOperatingStartTime == null
-                  ? null
-                  : _formatTimeForStorage(_hubOperatingStartTime!),
-          'operatingEndTime':
-              _hubOperatingEndTime == null
-                  ? null
-                  : _formatTimeForStorage(_hubOperatingEndTime!),
-          'contactCountryCode': _hubContactCountryCodeController.text.trim(),
-          'contactLocalNumber': _hubContactNumberController.text.trim(),
-          'contactNumber': hubContactNumber,
-          'status': nextStatus,
-        }, SetOptions(merge: true));
-      }
 
       await _firestore.collection('USER').doc(user.uid).set({
         'fullName': _fullNameController.text.trim(),
@@ -1145,7 +874,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
                       child: AppLoadingState(
-                        message: 'Loading location options...',
+                        message: 'Loading phone code options...',
                       ),
                     )
                   else if (_locationErrorMessage != null) ...[
@@ -1216,184 +945,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
                       },
                     ),
                   ],
-                  if (widget.role == UserRole.hub) ...[
-                    const SizedBox(height: AppSpacing.lg),
-                    Text(
-                      'Hub Details',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    const Text(
-                      'Fill these in to reactivate your hub account and make it available in handover flows.',
-                      style: TextStyle(
-                        color: AppColors.mist,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    AppTextField(
-                      controller: _hubNameController,
-                      label: 'Hub Name *',
-                      prefixIcon: const Icon(Icons.storefront_outlined),
-                      validator: (value) {
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    DropdownButtonFormField<String>(
-                      initialValue:
-                          _weekdayOptions.contains(_hubOperatingStartDay)
-                              ? _hubOperatingStartDay
-                              : null,
-                      decoration: const InputDecoration(
-                        labelText: 'Start Day *',
-                        prefixIcon: Icon(Icons.event_outlined),
-                      ),
-                      items: _weekdayOptions
-                          .map(
-                            (day) => DropdownMenuItem<String>(
-                              value: day,
-                              child: Text(day),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: _isSavingProfile
-                          ? null
-                          : (value) {
-                              setState(() {
-                                _hubOperatingStartDay = value ?? '';
-                                _hubOperatingHoursController.text =
-                                    _formatOperatingHoursRange(context);
-                              });
-                            },
-                      validator: (value) {
-                        if ((value ?? '').trim().isEmpty &&
-                            _hasAnyHubOperatingScheduleInput()) {
-                          return 'Select a start day.';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    DropdownButtonFormField<String>(
-                      initialValue:
-                          _weekdayOptions.contains(_hubOperatingEndDay)
-                              ? _hubOperatingEndDay
-                              : null,
-                      decoration: const InputDecoration(
-                        labelText: 'End Day *',
-                        prefixIcon: Icon(Icons.event_outlined),
-                      ),
-                      items: _weekdayOptions
-                          .map(
-                            (day) => DropdownMenuItem<String>(
-                              value: day,
-                              child: Text(day),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: _isSavingProfile
-                          ? null
-                          : (value) {
-                              setState(() {
-                                _hubOperatingEndDay = value ?? '';
-                                _hubOperatingHoursController.text =
-                                    _formatOperatingHoursRange(context);
-                              });
-                            },
-                      validator: (value) {
-                        if ((value ?? '').trim().isEmpty &&
-                            _hasAnyHubOperatingScheduleInput()) {
-                          return 'Select an end day.';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    AppTextField(
-                      controller: _hubOperatingStartTimeController,
-                      label: 'Start Time *',
-                      hint: 'Select start time',
-                      readOnly: true,
-                      onTap: _pickHubOperatingStartTime,
-                      prefixIcon: const Icon(Icons.schedule_outlined),
-                      suffixIcon: IconButton(
-                        onPressed: _pickHubOperatingStartTime,
-                        icon: const Icon(Icons.access_time_outlined),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    AppTextField(
-                      controller: _hubOperatingEndTimeController,
-                      label: 'End Time *',
-                      hint: 'Select end time',
-                      readOnly: true,
-                      onTap: _pickHubOperatingEndTime,
-                      prefixIcon: const Icon(Icons.schedule_outlined),
-                      suffixIcon: IconButton(
-                        onPressed: _pickHubOperatingEndTime,
-                        icon: const Icon(Icons.access_time_outlined),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    const Text(
-                      'Fill all four fields together to set the hub schedule.',
-                      style: TextStyle(
-                        color: AppColors.mist,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _SearchableFormField(
-                          width: 88,
-                          controller: _hubContactCountryCodeController,
-                          label: 'Code *',
-                          hint: '+65',
-                          options: phoneCodes,
-                          enabled: phoneCodes.isNotEmpty,
-                          optionLabelBuilder: (code) {
-                            final option = _countryOptions.firstWhere(
-                              (item) => item.dialCode == code,
-                              orElse: () => _countryOptions.first,
-                            );
-                            return '${option.flag} $code';
-                          },
-                          validator: (value) {
-                            final code = value?.trim() ?? '';
-                            if (code.isNotEmpty && !phoneCodes.contains(code)) {
-                              return 'Pick a valid code.';
-                            }
-                            return null;
-                          },
-                          onSelected: _setHubContactCountryCode,
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: AppTextField(
-                            controller: _hubContactNumberController,
-                            label: 'Contact Number *',
-                            keyboardType: TextInputType.phone,
-                            prefixIcon: const Icon(Icons.phone_outlined),
-                            validator: (value) {
-                              final trimmed = value?.trim() ?? '';
-                              if (trimmed.isNotEmpty &&
-                                  !RegExp(
-                                    r'^[0-9\s-]{6,}$',
-                                  ).hasMatch(trimmed)) {
-                                return 'Use digits only for the local phone number.';
-                              }
-                              return null;
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
                   const SizedBox(height: AppSpacing.lg),
                   AppTextField(
                     controller: _bioController,
@@ -1462,38 +1013,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     return rawBase64.hasMatch(source) && source.length % 4 == 0;
   }
 
-  String _normalizeCountry(String value) {
-    final trimmed = value.trim();
-    for (final option in _countryOptions) {
-      if (option.country.toLowerCase() == trimmed.toLowerCase()) {
-        return option.country;
-      }
-    }
-    return _countryOptions.first.country;
-  }
-
-  String _normalizeState(String value, String country) {
-    final states = _statesFor(country);
-    final trimmed = value.trim();
-    for (final state in states) {
-      if (state.toLowerCase() == trimmed.toLowerCase()) {
-        return state;
-      }
-    }
-    return states.first;
-  }
-
-  String _normalizeCity(String value, String country, String state) {
-    final cities = _citiesFor(country, state);
-    final trimmed = value.trim();
-    for (final city in cities) {
-      if (city.toLowerCase() == trimmed.toLowerCase()) {
-        return city;
-      }
-    }
-    return cities.first;
-  }
-
   String _normalizePhoneCountryCode(String value, String fullPhone) {
     final trimmed = value.trim();
     if (_countryOptions.any((option) => option.dialCode == trimmed)) {
@@ -1516,37 +1035,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
       return trimmed.substring(countryCode.length).trimLeft();
     }
     return trimmed;
-  }
-
-  List<String> _statesFor(String country) {
-    for (final option in _countryOptions) {
-      if (option.country == country) {
-        return option.states
-            .map((state) => state.name)
-            .toSet()
-            .toList(growable: false);
-      }
-    }
-    return _countryOptions.first.states
-        .map((state) => state.name)
-        .toSet()
-        .toList(growable: false);
-  }
-
-  List<String> _citiesFor(String country, String state) {
-    for (final option in _countryOptions) {
-      if (option.country == country) {
-        for (final region in option.states) {
-          if (region.name == state) {
-            return region.cities.toSet().toList(growable: false);
-          }
-        }
-        return option.states.first.cities.toSet().toList(growable: false);
-      }
-    }
-    return _countryOptions.first.states.first.cities.toSet().toList(
-      growable: false,
-    );
   }
 }
 
