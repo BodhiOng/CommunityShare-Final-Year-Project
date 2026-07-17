@@ -725,7 +725,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
         'passwordHash': existingUser.passwordHash,
         'phoneCountryCode': phoneCountryCode,
         'phoneLocalNumber': phoneLocalNumber,
-        'phoneNumber': FieldValue.delete(),
         'role': role,
         'status': status,
         'createdAt': createdAt,
@@ -1520,44 +1519,12 @@ String _stringValue(dynamic value, {String fallback = ''}) {
 }
 
 String _resolvePhoneCountryCode(Map<String, dynamic> data) {
-  final explicit = _stringValue(data['phoneCountryCode']);
-  if (explicit.isNotEmpty) {
-    return explicit;
-  }
-
-  final legacyPhone = _stringValue(data['phoneNumber']);
-  for (final code in _adminPhoneCodes) {
-    if (legacyPhone.startsWith(code)) {
-      return code;
-    }
-  }
-  return '';
+  return _stringValue(data['phoneCountryCode']);
 }
 
 String _resolvePhoneLocalNumber(Map<String, dynamic> data) {
-  final explicit = _stringValue(data['phoneLocalNumber']);
-  if (explicit.isNotEmpty) {
-    return explicit;
-  }
-
-  final legacyPhone = _stringValue(data['phoneNumber']);
-  final code = _resolvePhoneCountryCode(data);
-  if (code.isNotEmpty && legacyPhone.startsWith(code)) {
-    return legacyPhone.substring(code.length).trim();
-  }
-  return legacyPhone;
+  return _stringValue(data['phoneLocalNumber']);
 }
-
-const List<String> _adminPhoneCodes = [
-  '+65',
-  '+60',
-  '+62',
-  '+63',
-  '+1',
-  '+44',
-  '+61',
-  '+91',
-];
 
 String _titleCase(String value) {
   if (value.trim().isEmpty) {

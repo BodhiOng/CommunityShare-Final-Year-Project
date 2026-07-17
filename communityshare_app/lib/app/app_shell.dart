@@ -1452,8 +1452,6 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
 
   static String _phoneForUser(Map<String, dynamic>? data) {
     if (data == null || data.isEmpty) return 'Phone not provided';
-    final phone = data['phoneNumber']?.toString().trim() ?? '';
-    if (phone.isNotEmpty) return phone;
     final phoneCode = data['phoneCountryCode']?.toString().trim() ?? '';
     final localPhone = data['phoneLocalNumber']?.toString().trim() ?? '';
     final combined =

@@ -243,7 +243,6 @@ exports.promoteManagedUserToAdmin = onCall(async (request) => {
         passwordHash: optionalString(currentData.passwordHash),
         phoneCountryCode,
         phoneLocalNumber,
-        phoneNumber: admin.firestore.FieldValue.delete(),
         role: "admin",
         status,
         createdAt:

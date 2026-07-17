@@ -556,11 +556,6 @@ class _RecipientRequestStatusPageState
   }
 
   static String _phoneForUser(Map<String, dynamic> data) {
-    final phone = data['phoneNumber']?.toString().trim() ?? '';
-    if (phone.isNotEmpty) {
-      return phone;
-    }
-
     final phoneCode = data['phoneCountryCode']?.toString().trim() ?? '';
     final localPhone = data['phoneLocalNumber']?.toString().trim() ?? '';
     final combined =

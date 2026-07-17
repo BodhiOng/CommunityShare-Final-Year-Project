@@ -79,7 +79,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
   DateTime? _createdAt;
   List<_CountryOption> _countryOptions = const [];
   String _selectedPhoneCountryCode = '';
-  String _pendingPhoneCountryCode = '';
   String _pendingHubContactNumber = '';
   String _legacyHubOperatingHours = '';
   String _hubOperatingStartDay = '';
@@ -179,19 +178,12 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
           fallback: user.displayName ?? '',
         ),
       );
-      _phoneController.text = _stringValue(
-        data['phoneNumber'],
-        fallback: _stringValue(data['phone']),
-      );
+      _selectedPhoneCountryCode = _stringValue(data['phoneCountryCode']);
+      _phoneController.text = _stringValue(data['phoneLocalNumber']);
       _bioController.text = _stringValue(data['bio']);
       _addressController.text = _stringValue(
         data['address'],
         fallback: _stringValue(hubData['address']),
-      );
-      _pendingPhoneCountryCode = _stringValue(data['phoneCountryCode']);
-      _phoneController.text = _stripPhoneCountryCode(
-        _phoneController.text,
-        _pendingPhoneCountryCode,
       );
       _pendingHubContactNumber = _stringValue(
         hubData['contactNumber'],
@@ -673,8 +665,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         'fullName': _fullNameController.text.trim(),
         'email': user.email ?? '',
         'phoneCountryCode': _selectedPhoneCountryCode,
-        'phoneNumber':
-            '$_selectedPhoneCountryCode${_phoneController.text.trim()}',
         'phoneLocalNumber': _phoneController.text.trim(),
         'bio': _bioController.text.trim(),
         'address': _addressController.text.trim(),
@@ -697,8 +687,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         'username': _fullNameController.text.trim(),
         'email': user.email ?? '',
         'phoneCountryCode': _selectedPhoneCountryCode,
-        'phoneNumber':
-            '$_selectedPhoneCountryCode${_phoneController.text.trim()}',
         'phoneLocalNumber': _phoneController.text.trim(),
         'bio': _bioController.text.trim(),
         'address': _addressController.text.trim(),
