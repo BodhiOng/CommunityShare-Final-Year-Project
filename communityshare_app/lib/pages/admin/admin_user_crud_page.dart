@@ -28,7 +28,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     'active',
     'inactive',
     'suspended',
-    'deleted',
   ];
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -110,7 +109,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
             user.userId.toLowerCase().contains(query) ||
             user.fullName.toLowerCase().contains(query) ||
             user.email.toLowerCase().contains(query) ||
-            user.phoneNumber.toLowerCase().contains(query);
+            user.displayPhone.toLowerCase().contains(query);
 
         final matchesRole =
             _roleFilter == 'all' || user.role.toLowerCase() == _roleFilter;
@@ -243,8 +242,12 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
         TextEditingController(text: user?.fullName ?? '');
     final emailController = TextEditingController(text: user?.email ?? '');
     final passwordController = TextEditingController();
-    final phoneNumberController =
-        TextEditingController(text: user?.phoneNumber ?? '');
+    final phoneCountryCodeController = TextEditingController(
+      text: user?.phoneCountryCode ?? '',
+    );
+    final phoneLocalNumberController = TextEditingController(
+      text: user?.phoneLocalNumber ?? '',
+    );
     final recipientTypeController =
         TextEditingController(text: details.recipientType);
     final hubIdController = TextEditingController(
@@ -266,7 +269,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
 
     final didSave = await showDialog<bool>(
       context: context,
-      barrierDismissible: !isSaving,
+      barrierDismissible: false,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -287,7 +290,8 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                   fullName: fullNameController.text.trim(),
                   email: emailController.text.trim(),
                   password: passwordController.text,
-                  phoneNumber: phoneNumberController.text.trim(),
+                  phoneCountryCode: phoneCountryCodeController.text.trim(),
+                  phoneLocalNumber: phoneLocalNumberController.text.trim(),
                   role: role,
                   status: status,
                   recipientType: recipientTypeController.text.trim(),
@@ -330,14 +334,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'This page manages USER and linked role-table documents. New users are created through Firebase Functions so Authentication and Firestore stay aligned.',
-                          style: TextStyle(
-                            color: AppColors.mist,
-                            height: 1.5,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.md),
                         AppTextField(
                           controller: fullNameController,
                           label: 'Full Name',
@@ -350,11 +346,54 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                           },
                         ),
                         const SizedBox(height: AppSpacing.md),
-                        AppTextField(
-                          controller: phoneNumberController,
-                          label: 'Phone Number',
-                          keyboardType: TextInputType.phone,
-                          prefixIcon: const Icon(Icons.phone_outlined),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 110,
+                              child: TextFormField(
+                                controller: phoneCountryCodeController,
+                                keyboardType: TextInputType.text,
+                                style: const TextStyle(color: AppColors.white),
+                                decoration: const InputDecoration(
+                                  labelText: 'Code',
+                                  hintText: '+65',
+                                ),
+                                validator: (value) {
+                                  final trimmed = value?.trim() ?? '';
+                                  if (trimmed.isEmpty) {
+                                    return 'Enter a code.';
+                                  }
+                                  if (!RegExp(r'^\+[0-9]{1,4}$')
+                                      .hasMatch(trimmed)) {
+                                    return 'Use +code.';
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: AppTextField(
+                                controller: phoneLocalNumberController,
+                                label: 'Phone Number',
+                                keyboardType: TextInputType.phone,
+                                prefixIcon:
+                                    const Icon(Icons.phone_outlined),
+                                validator: (value) {
+                                  final trimmed = value?.trim() ?? '';
+                                  if (trimmed.isEmpty) {
+                                    return 'Enter a phone number.';
+                                  }
+                                  if (!RegExp(r'^[0-9\s-]{6,}$')
+                                      .hasMatch(trimmed)) {
+                                    return 'Use digits only for the local phone number.';
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
+                          ],
                         ),
                         if (user == null) ...[
                           const SizedBox(height: AppSpacing.md),
@@ -381,7 +420,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                           const SizedBox(height: AppSpacing.md),
                           AppTextField(
                             controller: passwordController,
-                            label: 'Temporary Password',
+                            label: 'Password',
                             obscureText: true,
                             prefixIcon: const Icon(Icons.lock_outline_rounded),
                             validator: (value) {
@@ -411,6 +450,12 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                                 ),
                               )
                               .toList(growable: false),
+                          validator: (value) {
+                            if (user == null && (value == null || value.trim().isEmpty)) {
+                              return 'Select a role.';
+                            }
+                            return null;
+                          },
                           onChanged: (value) {
                             if (value == null) {
                               return;
@@ -439,6 +484,12 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                                 ),
                               )
                               .toList(growable: false),
+                          validator: (value) {
+                            if (user == null && (value == null || value.trim().isEmpty)) {
+                              return 'Select a status.';
+                            }
+                            return null;
+                          },
                           onChanged: (value) {
                             if (value == null) {
                               return;
@@ -517,6 +568,15 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                             controller: operatingHoursController,
                             label: 'Operating Hours',
                             prefixIcon: const Icon(Icons.schedule_outlined),
+                            validator: (value) {
+                              if (role != 'hub') {
+                                return null;
+                              }
+                              if ((value ?? '').trim().isEmpty) {
+                                return 'Enter the operating hours.';
+                              }
+                              return null;
+                            },
                           ),
                           const SizedBox(height: AppSpacing.md),
                           AppTextField(
@@ -524,6 +584,16 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                             label: 'Contact Number',
                             keyboardType: TextInputType.phone,
                             prefixIcon: const Icon(Icons.call_outlined),
+                            validator: (value) {
+                              if (role != 'hub') {
+                                return null;
+                              }
+                              final trimmed = value?.trim() ?? '';
+                              if (trimmed.isEmpty) {
+                                return 'Enter the contact number.';
+                              }
+                              return null;
+                            },
                           ),
                         ],
                         if (errorMessage.isNotEmpty) ...[
@@ -581,17 +651,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
       },
     );
 
-    fullNameController.dispose();
-    emailController.dispose();
-    passwordController.dispose();
-    phoneNumberController.dispose();
-    recipientTypeController.dispose();
-    hubIdController.dispose();
-    hubNameController.dispose();
-    addressController.dispose();
-    operatingHoursController.dispose();
-    contactNumberController.dispose();
-
     if (didSave == true) {
       await _loadUsers();
       if (!mounted) {
@@ -611,7 +670,8 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     required String fullName,
     required String email,
     required String password,
-    required String phoneNumber,
+    required String phoneCountryCode,
+    required String phoneLocalNumber,
     required String role,
     required String status,
     required String recipientType,
@@ -623,7 +683,8 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
         email: email,
         password: password,
         fullName: fullName,
-        phoneNumber: phoneNumber,
+        phoneCountryCode: phoneCountryCode,
+        phoneLocalNumber: phoneLocalNumber,
         role: role,
         status: status,
         recipientType: recipientType,
@@ -642,7 +703,8 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
         userId: userId,
         fullName: fullName,
         email: email,
-        phoneNumber: phoneNumber,
+        phoneCountryCode: phoneCountryCode,
+        phoneLocalNumber: phoneLocalNumber,
         status: status,
       );
       return;
@@ -661,10 +723,13 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
         'fullName': fullName,
         'email': email,
         'passwordHash': existingUser.passwordHash,
-        'phoneNumber': phoneNumber,
+        'phoneCountryCode': phoneCountryCode,
+        'phoneLocalNumber': phoneLocalNumber,
+        'phoneNumber': FieldValue.delete(),
         'role': role,
         'status': status,
         'createdAt': createdAt,
+        'updatedAt': FieldValue.serverTimestamp(),
       },
       SetOptions(merge: true),
     );
@@ -686,7 +751,8 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     required String email,
     required String password,
     required String fullName,
-    required String phoneNumber,
+    required String phoneCountryCode,
+    required String phoneLocalNumber,
     required String role,
     required String status,
     required String recipientType,
@@ -697,7 +763,8 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
         'email': email,
         'password': password,
         'fullName': fullName,
-        'phoneNumber': phoneNumber,
+        'phoneCountryCode': phoneCountryCode,
+        'phoneLocalNumber': phoneLocalNumber,
         'role': role,
         'status': status,
         'recipientType': recipientType,
@@ -718,7 +785,8 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     required String userId,
     required String fullName,
     required String email,
-    required String phoneNumber,
+    required String phoneCountryCode,
+    required String phoneLocalNumber,
     required String status,
   }) async {
     try {
@@ -726,7 +794,8 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
         'userId': userId,
         'fullName': fullName,
         'email': email,
-        'phoneNumber': phoneNumber,
+        'phoneCountryCode': phoneCountryCode,
+        'phoneLocalNumber': phoneLocalNumber,
         'status': status,
       });
     } on FirebaseFunctionsException catch (error) {
@@ -932,7 +1001,7 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
               children: [
                 _detailLine('User ID', user.userId),
                 _detailLine('Email', user.email),
-                _detailLine('Phone', user.phoneNumber),
+                _detailLine('Phone', user.displayPhone),
                 _detailLine('Role', _titleCase(user.role)),
                 _detailLine('Status', _titleCase(user.status)),
                 _detailLine(
@@ -1298,7 +1367,8 @@ class _ManagedUserRecord {
     required this.fullName,
     required this.email,
     required this.passwordHash,
-    required this.phoneNumber,
+    required this.phoneCountryCode,
+    required this.phoneLocalNumber,
     required this.role,
     required this.status,
     required this.createdAt,
@@ -1313,7 +1383,8 @@ class _ManagedUserRecord {
       fullName: _stringValue(data['fullName']),
       email: _stringValue(data['email']),
       passwordHash: _stringValue(data['passwordHash']),
-      phoneNumber: _stringValue(data['phoneNumber']),
+      phoneCountryCode: _resolvePhoneCountryCode(data),
+      phoneLocalNumber: _resolvePhoneLocalNumber(data),
       role: _stringValue(data['role'], fallback: 'recipient'),
       status: _stringValue(data['status'], fallback: 'active'),
       createdAt: _readDateTime(data['createdAt']),
@@ -1324,10 +1395,18 @@ class _ManagedUserRecord {
   final String fullName;
   final String email;
   final String passwordHash;
-  final String phoneNumber;
+  final String phoneCountryCode;
+  final String phoneLocalNumber;
   final String role;
   final String status;
   final DateTime? createdAt;
+
+  String get displayPhone {
+    if (phoneCountryCode.isEmpty && phoneLocalNumber.isEmpty) {
+      return 'Not provided';
+    }
+    return '$phoneCountryCode $phoneLocalNumber'.trim();
+  }
 }
 
 class _RoleSpecificDetails {
@@ -1439,6 +1518,46 @@ String _stringValue(dynamic value, {String fallback = ''}) {
   final normalized = value?.toString().trim() ?? '';
   return normalized.isEmpty ? fallback : normalized;
 }
+
+String _resolvePhoneCountryCode(Map<String, dynamic> data) {
+  final explicit = _stringValue(data['phoneCountryCode']);
+  if (explicit.isNotEmpty) {
+    return explicit;
+  }
+
+  final legacyPhone = _stringValue(data['phoneNumber']);
+  for (final code in _adminPhoneCodes) {
+    if (legacyPhone.startsWith(code)) {
+      return code;
+    }
+  }
+  return '';
+}
+
+String _resolvePhoneLocalNumber(Map<String, dynamic> data) {
+  final explicit = _stringValue(data['phoneLocalNumber']);
+  if (explicit.isNotEmpty) {
+    return explicit;
+  }
+
+  final legacyPhone = _stringValue(data['phoneNumber']);
+  final code = _resolvePhoneCountryCode(data);
+  if (code.isNotEmpty && legacyPhone.startsWith(code)) {
+    return legacyPhone.substring(code.length).trim();
+  }
+  return legacyPhone;
+}
+
+const List<String> _adminPhoneCodes = [
+  '+65',
+  '+60',
+  '+62',
+  '+63',
+  '+1',
+  '+44',
+  '+61',
+  '+91',
+];
 
 String _titleCase(String value) {
   if (value.trim().isEmpty) {

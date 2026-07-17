@@ -33,7 +33,8 @@ exports.registerUser = onCall(async (request) => {
   const fullName = requiredString(data.fullName, "fullName");
   const role = normalizePublicRole(data.role);
   const status = "inactive";
-  const phoneNumber = optionalString(data.phoneNumber);
+  const phoneCountryCode = optionalString(data.phoneCountryCode);
+  const phoneLocalNumber = optionalString(data.phoneLocalNumber);
   const recipientType = optionalString(data.recipientType);
   const hubDetails = normalizeHubDetails(data.hubDetails || {}, status);
 
@@ -56,7 +57,8 @@ exports.registerUser = onCall(async (request) => {
       userId: createdUser.uid,
       fullName,
       email,
-      phoneNumber,
+      phoneCountryCode,
+      phoneLocalNumber,
       role,
       status,
       recipientType,
@@ -84,7 +86,8 @@ exports.createManagedUser = onCall(async (request) => {
   const fullName = requiredString(data.fullName, "fullName");
   const role = normalizeRole(data.role);
   const status = normalizeStatus(data.status);
-  const phoneNumber = optionalString(data.phoneNumber);
+  const phoneCountryCode = optionalString(data.phoneCountryCode);
+  const phoneLocalNumber = optionalString(data.phoneLocalNumber);
   const recipientType = optionalString(data.recipientType);
   const hubDetails = normalizeHubDetails(data.hubDetails || {}, status);
 
@@ -111,7 +114,8 @@ exports.createManagedUser = onCall(async (request) => {
       userId: createdUser.uid,
       fullName,
       email,
-      phoneNumber,
+      phoneCountryCode,
+      phoneLocalNumber,
       role,
       status,
       recipientType,
@@ -129,7 +133,8 @@ async function createUserDocuments({
   userId,
   fullName,
   email,
-  phoneNumber,
+  phoneCountryCode,
+  phoneLocalNumber,
   role,
   status,
   recipientType,
@@ -150,10 +155,12 @@ async function createUserDocuments({
       fullName,
       email,
       passwordHash: "",
-      phoneNumber,
+      phoneCountryCode,
+      phoneLocalNumber,
       role,
       status,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
     writeRoleDocument({
@@ -202,7 +209,8 @@ exports.promoteManagedUserToAdmin = onCall(async (request) => {
   const userId = requiredString(data.userId, "userId");
   const fullName = requiredString(data.fullName, "fullName");
   const email = requiredString(data.email, "email");
-  const phoneNumber = optionalString(data.phoneNumber);
+  const phoneCountryCode = optionalString(data.phoneCountryCode);
+  const phoneLocalNumber = optionalString(data.phoneLocalNumber);
   const status = normalizeStatus(data.status);
 
   const userRef = db.collection(COLLECTIONS.user).doc(userId);
@@ -233,11 +241,14 @@ exports.promoteManagedUserToAdmin = onCall(async (request) => {
         fullName,
         email,
         passwordHash: optionalString(currentData.passwordHash),
-        phoneNumber,
+        phoneCountryCode,
+        phoneLocalNumber,
+        phoneNumber: admin.firestore.FieldValue.delete(),
         role: "admin",
         status,
         createdAt:
           currentData.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       {merge: true},
     );

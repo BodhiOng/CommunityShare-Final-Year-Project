@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/user_role.dart';
 import '../constants.dart';
+import '../pages/shared/help_faq_page.dart';
 
 class AppShellScaffold extends StatelessWidget {
   const AppShellScaffold({
@@ -79,6 +80,19 @@ class AppShellScaffold extends StatelessWidget {
                   onTap(i);
                 },
               ),
+            const Divider(height: 1, color: AppColors.pine),
+            ListTile(
+              leading: const Icon(Icons.help_outline_rounded),
+              title: const Text('Help / FAQ'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const HelpFaqPage(),
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
