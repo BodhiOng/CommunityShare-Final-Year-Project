@@ -958,14 +958,15 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('Close'),
             ),
-            FilledButton.icon(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                await _openUserEditor(user: user);
-              },
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('Edit'),
-            ),
+            if (!_isSignedInAdmin(user))
+              FilledButton.icon(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  await _openUserEditor(user: user);
+                },
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Edit'),
+              ),
           ],
         );
       },
@@ -1204,11 +1205,16 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                                             value: 'view',
                                             child: Text('View details'),
                                           ),
-                                          const PopupMenuItem<String>(
-                                            value: 'edit',
-                                            child: Text('Edit user'),
-                                          ),
                                         ];
+
+                                        if (!_isSignedInAdmin(user)) {
+                                          items.add(
+                                            const PopupMenuItem<String>(
+                                              value: 'edit',
+                                              child: Text('Edit user'),
+                                            ),
+                                          );
+                                        }
 
                                         if (!_isSignedInAdmin(user)) {
                                           items.add(
@@ -1237,11 +1243,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                                     icon: Icons.toggle_on_outlined,
                                     label: _titleCase(user.status),
                                   ),
-                                  if (user.phoneNumber.isNotEmpty)
-                                    _InfoPill(
-                                      icon: Icons.phone_outlined,
-                                      label: user.phoneNumber,
-                                    ),
                                 ],
                               ),
                             ],
