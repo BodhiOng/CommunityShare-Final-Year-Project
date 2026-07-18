@@ -776,7 +776,18 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
         },
       });
     } on FirebaseFunctionsException catch (error) {
-      throw Exception(error.message ?? 'Unable to create user.');
+      throw Exception(_createUserFunctionErrorMessage(error));
+    }
+  }
+
+  String _createUserFunctionErrorMessage(FirebaseFunctionsException error) {
+    switch (error.code) {
+      case 'already-exists':
+        return 'An account already exists for this email.';
+      case 'invalid-argument':
+        return error.message ?? 'Please review the form details and try again.';
+      default:
+        return error.message ?? 'Unable to create user.';
     }
   }
 

@@ -9,7 +9,12 @@ import 'admin_user_crud_page.dart';
 import '../../utils/page_transitions.dart';
 
 class AdminProductModerationPage extends StatefulWidget {
-  const AdminProductModerationPage({super.key});
+  const AdminProductModerationPage({
+    super.key,
+    this.debugReports,
+  });
+
+  final List<Map<String, dynamic>>? debugReports;
 
   @override
   State<AdminProductModerationPage> createState() =>
@@ -21,7 +26,7 @@ class _AdminProductModerationPageState
   static const int _reportsPerPage = 8;
   int _selectedIndex =
       1; // 0 for User Management, 1 for Product Moderation, 2 for Order Moderation, 3 for Customer Support, 4 for Profile
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
   List<Map<String, dynamic>> _reports = [];
   List<Map<String, dynamic>> _filteredReports = [];
@@ -35,7 +40,13 @@ class _AdminProductModerationPageState
   @override
   void initState() {
     super.initState();
-    _fetchReports();
+    if (widget.debugReports != null) {
+      _reports = List<Map<String, dynamic>>.from(widget.debugReports!);
+      _filteredReports = _reports;
+      _isLoading = false;
+    } else {
+      _fetchReports();
+    }
   }
 
   @override
@@ -848,6 +859,74 @@ class _AdminProductModerationPageState
                             },
                           ),
                         ),
+                        if (_totalPages > 1)
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.fromLTRB(
+                              AppSpacing.md,
+                              0,
+                              AppSpacing.md,
+                              AppSpacing.md,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.md,
+                              vertical: AppSpacing.sm,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.deepSlateGray.withValues(
+                                alpha: 0.92,
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.md,
+                              ),
+                              border: Border.all(
+                                color: AppColors.mutedTeal.withValues(
+                                  alpha: 0.35,
+                                ),
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Page ${_currentPage + 1} of $_totalPages',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: AppColors.softLemonYellow,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.sm),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    FilledButton.tonalIcon(
+                                      onPressed:
+                                          _currentPage > 0
+                                              ? () => _goToPage(
+                                                _currentPage - 1,
+                                              )
+                                              : null,
+                                      icon: const Icon(Icons.chevron_left),
+                                      label: const Text('Previous'),
+                                    ),
+                                    const SizedBox(width: AppSpacing.sm),
+                                    FilledButton.tonalIcon(
+                                      onPressed:
+                                          _currentPage + 1 < _totalPages
+                                              ? () => _goToPage(
+                                                _currentPage + 1,
+                                              )
+                                              : null,
+                                      icon: const Icon(Icons.chevron_right),
+                                      label: const Text('Next'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
           ),

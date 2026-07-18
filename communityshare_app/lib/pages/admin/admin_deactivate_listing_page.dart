@@ -25,9 +25,9 @@ class _AdminDeactivateListingPageState extends State<AdminDeactivateListingPage>
   bool _isSubmitting = false;
 
   Future<void> _deactivateListing() async {
-    if (widget.report.listingDocId.isEmpty) {
+    if (widget.report.listingDocId.isEmpty || widget.report.reportDocId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Listing document was not found.')),
+        const SnackBar(content: Text('Listing or report document was not found.')),
       );
       return;
     }
@@ -37,23 +37,20 @@ class _AdminDeactivateListingPageState extends State<AdminDeactivateListingPage>
     });
 
     try {
-      final relatedReports = await _firestore
-          .collection('REPORT')
-          .where('itemId', isEqualTo: widget.report.itemId)
-          .get();
-
       final batch = _firestore.batch();
       final listingRef =
           _firestore.collection('ITEM_LISTING').doc(widget.report.listingDocId);
+      final reportRef =
+          _firestore.collection('REPORT').doc(widget.report.reportDocId);
+
       batch.update(listingRef, {
         'availabilityStatus': 'deactivated',
+        'updatedAt': FieldValue.serverTimestamp(),
       });
-
-      for (final doc in relatedReports.docs) {
-        batch.update(doc.reference, {
-          'reportStatus': 'resolved',
-        });
-      }
+      batch.update(reportRef, {
+        'reportStatus': 'resolved',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
 
       await batch.commit();
 
@@ -63,7 +60,7 @@ class _AdminDeactivateListingPageState extends State<AdminDeactivateListingPage>
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Listing deactivated and related reports resolved.'),
+          content: Text('Listing deactivated and report resolved.'),
         ),
       );
       Navigator.of(context).pop();
@@ -81,13 +78,69 @@ class _AdminDeactivateListingPageState extends State<AdminDeactivateListingPage>
     }
   }
 
+  Future<void> _dismissReport() async {
+    if (widget.report.reportDocId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Report document was not found.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final batch = _firestore.batch();
+      final reportRef =
+          _firestore.collection('REPORT').doc(widget.report.reportDocId);
+      batch.update(reportRef, {
+        'reportStatus': 'dismissed',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (widget.report.listingDocId.isNotEmpty) {
+        final listingRef =
+            _firestore.collection('ITEM_LISTING').doc(widget.report.listingDocId);
+        batch.update(listingRef, {
+          'availabilityStatus': 'available',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      await batch.commit();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Report dismissed. The listing was restored to available.'),
+        ),
+      );
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isSubmitting = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to dismiss report: $error')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final report = widget.report;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Deactivate Listing'),
+        title: const Text('Dismiss Report'),
       ),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
@@ -196,52 +249,80 @@ class _AdminDeactivateListingPageState extends State<AdminDeactivateListingPage>
             padding: const EdgeInsets.all(AppSpacing.lg),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(color: AppColors.coral),
-              color: AppColors.coral.withValues(alpha: 0.08),
+              border: Border.all(color: AppColors.mint),
+              color: AppColors.mint.withValues(alpha: 0.08),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Takedown action',
+                  'Report action',
                   style: TextStyle(
-                    color: AppColors.coral,
+                    color: AppColors.mint,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 const Text(
-                  'Deactivating this listing sets its availability status to deactivated and marks all related reports as resolved.',
+                  'Choose whether to hide the listing or clear the report and restore the listing.',
                   style: TextStyle(
                     color: AppColors.mist,
                     height: 1.5,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isSubmitting ? null : _deactivateListing,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.coral,
-                      foregroundColor: AppColors.white,
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isSubmitting ? null : _deactivateListing,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.coral,
+                          foregroundColor: AppColors.white,
+                        ),
+                        icon: _isSubmitting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.white,
+                                ),
+                              )
+                            : const Icon(Icons.block_outlined),
+                        label: Text(
+                          _isSubmitting
+                              ? 'Deactivating...'
+                              : 'Deactivate Listing',
+                        ),
+                      ),
                     ),
-                    icon: _isSubmitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.white,
-                            ),
-                          )
-                        : const Icon(Icons.block_outlined),
-                    label: Text(
-                      _isSubmitting
-                          ? 'Deactivating listing...'
-                          : 'Deactivate Listing',
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isSubmitting ? null : _dismissReport,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.forest,
+                          foregroundColor: AppColors.white,
+                        ),
+                        icon: _isSubmitting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.white,
+                                ),
+                              )
+                            : const Icon(Icons.visibility_off_outlined),
+                        label: Text(
+                          _isSubmitting
+                              ? 'Dismissing...'
+                              : 'Dismiss Report',
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),

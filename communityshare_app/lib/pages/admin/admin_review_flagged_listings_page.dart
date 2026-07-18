@@ -82,6 +82,7 @@ class _AdminReviewFlaggedListingsPageState
             reportId: data['reportId']?.toString().trim().isNotEmpty == true
                 ? data['reportId'].toString().trim()
                 : doc.id,
+            reportDocId: doc.id,
             itemId: itemId,
             reporterUserId: reporterId,
             reportedUserId: data['reportedUserId']?.toString().trim() ?? '',
@@ -237,7 +238,7 @@ class _AdminReviewFlaggedListingsPageState
                   const statuses = [
                     'all',
                     'pending',
-                    'investigating',
+                    'resolved',
                     'dismissed',
                   ];
                   final status = statuses[index];
@@ -389,6 +390,7 @@ class _AdminReviewFlaggedListingsPageState
 class FlaggedListingReportRecord {
   const FlaggedListingReportRecord({
     required this.reportId,
+    required this.reportDocId,
     required this.itemId,
     required this.reporterUserId,
     required this.reportedUserId,
@@ -404,6 +406,7 @@ class FlaggedListingReportRecord {
   });
 
   final String reportId;
+  final String reportDocId;
   final String itemId;
   final String reporterUserId;
   final String reportedUserId;

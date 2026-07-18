@@ -45,7 +45,7 @@ exports.registerUser = onCall(async (request) => {
     );
   }
 
-  const createdUser = await auth.createUser({
+  const createdUser = await createAuthUser({
     email,
     password,
     displayName: fullName,
@@ -102,7 +102,7 @@ exports.createManagedUser = onCall(async (request) => {
     validateHubDetails(hubDetails);
   }
 
-  const createdUser = await auth.createUser({
+  const createdUser = await createAuthUser({
     email,
     password,
     displayName: fullName,
@@ -172,6 +172,20 @@ async function createUserDocuments({
       hubDetails,
     });
   });
+}
+
+async function createAuthUser(userDetails) {
+  try {
+    return await auth.createUser(userDetails);
+  } catch (error) {
+    if (error?.code === "auth/email-already-exists") {
+      throw new HttpsError(
+        "already-exists",
+        "An account already exists for this email.",
+      );
+    }
+    throw error;
+  }
 }
 
 exports.deleteManagedUser = onCall(async (request) => {

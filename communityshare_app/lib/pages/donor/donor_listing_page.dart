@@ -343,7 +343,7 @@ class _DonorListingPageState extends State<DonorListingPage> {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       physics: const BouncingScrollPhysics(),
-                      itemCount: 5,
+                      itemCount: 6,
                       separatorBuilder:
                           (_, __) => const SizedBox(width: AppSpacing.sm),
                       itemBuilder: (context, index) {
@@ -367,6 +367,11 @@ class _DonorListingPageState extends State<DonorListingPage> {
                             return _buildAvailabilityFilterChip(
                               label: 'Claimed',
                               value: 'claimed',
+                            );
+                          case 4:
+                            return _buildAvailabilityFilterChip(
+                              label: 'Deactivated',
+                              value: 'deactivated',
                             );
                           default:
                             return _buildAvailabilityFilterChip(
