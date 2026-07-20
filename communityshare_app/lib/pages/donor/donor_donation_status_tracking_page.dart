@@ -156,7 +156,7 @@ class _DonorDonationStatusTrackingPageState
           (context) => AlertDialog(
             title: const Text('Cancel delivery?'),
             content: const Text(
-              'This will cancel the independent pickup delivery, return the listing to available, and mark the request as cancelled.',
+              'This will cancel the delivery, return the listing to available, and mark the request as cancelled.',
             ),
             actions: [
               TextButton(
@@ -180,24 +180,27 @@ class _DonorDonationStatusTrackingPageState
     });
 
     try {
-      final requestRef =
-          _firestore.collection('ITEM_REQUEST').doc(widget.request.docId);
+      final requestRef = _firestore
+          .collection('ITEM_REQUEST')
+          .doc(widget.request.docId);
       final handoverQuery =
           await _firestore
               .collection('HANDOVER')
               .where('requestId', isEqualTo: widget.request.requestId)
               .limit(1)
               .get();
-      final handoverRef = snapshot.handoverId.isNotEmpty
-          ? _firestore.collection('HANDOVER').doc(snapshot.handoverId)
-          : handoverQuery.docs.isNotEmpty
-          ? handoverQuery.docs.first.reference
-          : null;
+      final handoverRef =
+          snapshot.handoverId.isNotEmpty
+              ? _firestore.collection('HANDOVER').doc(snapshot.handoverId)
+              : handoverQuery.docs.isNotEmpty
+              ? handoverQuery.docs.first.reference
+              : null;
 
       DocumentReference<Map<String, dynamic>>? itemRef;
       if (widget.request.itemDocId.isNotEmpty) {
-        itemRef =
-            _firestore.collection('ITEM_LISTING').doc(widget.request.itemDocId);
+        itemRef = _firestore
+            .collection('ITEM_LISTING')
+            .doc(widget.request.itemDocId);
       } else if (widget.request.itemId.isNotEmpty) {
         final itemSnapshot =
             await _firestore
@@ -217,20 +220,14 @@ class _DonorDonationStatusTrackingPageState
       });
 
       if (itemRef != null) {
-        batch.update(itemRef, {
-          'availabilityStatus': 'available',
-        });
+        batch.update(itemRef, {'availabilityStatus': 'available'});
       }
 
       if (handoverRef != null) {
-        batch.set(
-          handoverRef,
-          {
-            'handoverStatus': 'cancelled',
-            'cancelledAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
+        batch.set(handoverRef, {
+          'handoverStatus': 'cancelled',
+          'cancelledAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       }
 
       final historyRef = _firestore
@@ -250,9 +247,9 @@ class _DonorDonationStatusTrackingPageState
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Delivery canceled.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Delivery canceled.')));
       await _loadTracking();
     } catch (error) {
       if (!mounted) {
@@ -274,11 +271,27 @@ class _DonorDonationStatusTrackingPageState
   bool _canCancelDelivery(_TrackingSnapshot snapshot) {
     final requestStatus = snapshot.requestStatus.toLowerCase();
     final handoverStatus = snapshot.handoverStatus.toLowerCase();
-    return snapshot.handoverType == 'independent_pickup' &&
+    final hasReachedHubOrBeyond =
+        requestStatus == 'item_at_community_hub' ||
+        requestStatus == 'completed' ||
+        handoverStatus == 'item_at_community_hub' ||
+        handoverStatus == 'completed' ||
+        snapshot.timeline.any((entry) {
+          final status = entry.status.toLowerCase();
+          return status == 'item_at_community_hub' ||
+              status == 'completed' ||
+              status == 'item_handed_to_intended_recipient';
+        });
+    final canCancelCurrentDelivery =
+        requestStatus == 'delivering_to_hub' ||
+        requestStatus == 'delivering_to_recipient' ||
+        handoverStatus == 'delivering_to_hub' ||
+        handoverStatus == 'delivering_to_recipient';
+    return canCancelCurrentDelivery &&
+        !hasReachedHubOrBeyond &&
         requestStatus != 'completed' &&
         requestStatus != 'rejected' &&
-        requestStatus != 'cancelled' &&
-        handoverStatus == 'delivering_to_recipient';
+        requestStatus != 'cancelled';
   }
 
   AppBar _buildAppBar() {

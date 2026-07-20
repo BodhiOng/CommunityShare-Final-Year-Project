@@ -5,8 +5,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../constants.dart';
-import 'donor_incoming_requests_page.dart';
 import '../../widgets/state_widgets.dart';
+import '../hub/hub_operating_schedule.dart';
+import 'donor_incoming_requests_page.dart';
 
 class DonorSelectHandoverPointPage extends StatefulWidget {
   const DonorSelectHandoverPointPage({super.key, required this.request});
@@ -98,7 +99,8 @@ class _DonorSelectHandoverPointPageState
         _requestStatus =
             requestData['requestStatus']?.toString().trim() ??
             widget.request.requestStatus;
-        _handoverStatus = handoverData['handoverStatus']?.toString().trim() ?? '';
+        _handoverStatus =
+            handoverData['handoverStatus']?.toString().trim() ?? '';
         _handoverDocId = handoverDoc?.id;
         _handoverType = resolvedHandoverType;
         _selectedHubId =
@@ -209,10 +211,11 @@ class _DonorSelectHandoverPointPageState
               .get();
       final latestStatus =
           latestHistorySnapshot.docs.isNotEmpty
-              ? latestHistorySnapshot.docs.first.data()['status']
-                    ?.toString()
-                    .trim()
-                    .toLowerCase()
+              ? latestHistorySnapshot.docs.first
+                  .data()['status']
+                  ?.toString()
+                  .trim()
+                  .toLowerCase()
               : '';
       if (latestStatus != deliveryStatus.toLowerCase()) {
         final historyId = _generateHistoryId();
@@ -312,8 +315,9 @@ class _DonorSelectHandoverPointPageState
       final requestRef = _firestore
           .collection('ITEM_REQUEST')
           .doc(widget.request.docId);
+      final nextRequestStatus = _isEditing ? 'cancelled' : 'rejected';
       batch.update(requestRef, {
-        'requestStatus': 'rejected',
+        'requestStatus': nextRequestStatus,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
@@ -463,7 +467,8 @@ class _DonorSelectHandoverPointPageState
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _isSaving || !canSaveHandover ? null : _saveHandover,
+                  onPressed:
+                      _isSaving || !canSaveHandover ? null : _saveHandover,
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(52),
                     shape: RoundedRectangleBorder(
@@ -481,10 +486,8 @@ class _DonorSelectHandoverPointPageState
                             ),
                           )
                           : Text(
-                            isDeliveryLocked
+                            isDeliveryLocked || _isEditing
                                 ? 'Handover Confirmed'
-                                : _isEditing
-                                ? 'Save Changes'
                                 : 'Confirm Handover',
                           ),
                 ),
@@ -555,10 +558,16 @@ class _DonorSelectHandoverPointPageState
   }
 
   bool _canSaveHandover() {
+    if (_isEditing) {
+      return false;
+    }
     if (_isDeliveryLocked()) {
       return false;
     }
     if (_isIndependentClaimed()) {
+      return false;
+    }
+    if (_hasHubReceivedItem()) {
       return false;
     }
     return true;
@@ -608,12 +617,16 @@ class _CommunityHubRecord {
               ? data['hubName'].toString().trim()
               : 'Community Hub',
       address: data['address']?.toString().trim() ?? 'Address not provided',
-      operatingHours:
-          data['operatingHours']?.toString().trim() ?? 'Hours not provided',
+      operatingHours: _resolveOperatingHours(data),
       contactNumber:
           data['contactNumber']?.toString().trim() ?? 'Contact not provided',
       status: data['status']?.toString().trim() ?? 'inactive',
     );
+  }
+
+  static String _resolveOperatingHours(Map<String, dynamic> data) {
+    final operatingHours = formatCommunityHubOperatingHours(data);
+    return operatingHours.isNotEmpty ? operatingHours : 'Hours not provided';
   }
 }
 
@@ -780,7 +793,7 @@ class _LockedMethodCard extends StatelessWidget {
                 ? (hubId.isNotEmpty
                     ? 'Hub ID: $hubId'
                     : 'The donor-configured hub will be used for this handover.')
-                : 'The donor and recipient will arrange the handover directly through the app.',
+                : 'The donor and recipient will handle the handover on their own using the provided phone number and address, outside of the platform.',
             style: const TextStyle(color: AppColors.mist, height: 1.5),
           ),
         ],

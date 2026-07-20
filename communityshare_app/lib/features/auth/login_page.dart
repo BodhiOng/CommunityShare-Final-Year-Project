@@ -7,6 +7,7 @@ import '../../app/user_role.dart';
 import '../../app/user_role_resolver.dart';
 import '../../constants.dart';
 import '../../widgets/app_forms.dart';
+import 'auth_validators.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -168,17 +169,7 @@ class _LoginPageState extends State<LoginPage> {
                             prefixIcon: const Icon(
                               Icons.alternate_email_rounded,
                             ),
-                            validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return 'Enter your email.';
-                              }
-                              if (!RegExp(
-                                r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$',
-                              ).hasMatch(value.trim())) {
-                                return 'Enter a valid email address.';
-                              }
-                              return null;
-                            },
+                            validator: validateRequiredEmail,
                           ),
                           const SizedBox(height: AppSpacing.md),
                           AppTextField(
@@ -198,12 +189,7 @@ class _LoginPageState extends State<LoginPage> {
                                     : Icons.visibility_off_outlined,
                               ),
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Enter your password.';
-                              }
-                              return null;
-                            },
+                            validator: validateRequiredPassword,
                           ),
                           if (_errorMessage.isNotEmpty) ...[
                             const SizedBox(height: AppSpacing.md),
@@ -235,8 +221,10 @@ class _LoginPageState extends State<LoginPage> {
                             icon: const Icon(Icons.login_rounded),
                           ),
                           const SizedBox(height: AppSpacing.md),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            runAlignment: WrapAlignment.center,
+                            spacing: AppSpacing.md,
                             children: [
                               TextButton(
                                 onPressed:

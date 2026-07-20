@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../constants.dart';
 import '../../widgets/state_widgets.dart';
+import '../hub/hub_operating_schedule.dart';
 
 class RecipientBrowseCommunityHubsPage extends StatefulWidget {
   const RecipientBrowseCommunityHubsPage({
@@ -61,15 +62,14 @@ class _RecipientBrowseCommunityHubsPageState
     try {
       final snapshot = await _firestore.collection('COMMUNITY_HUB').get();
       final hubs = snapshot.docs
-          .map(
-            (doc) => CommunityHubBrowseRecord.fromFirestore(doc.id, doc.data()),
-          )
-          .where((hub) => hub.status.toLowerCase() == 'active')
-          .toList(growable: false)
-        ..sort(
-          (left, right) =>
-              left.hubName.toLowerCase().compareTo(right.hubName.toLowerCase()),
-        );
+        .map(
+          (doc) => CommunityHubBrowseRecord.fromFirestore(doc.id, doc.data()),
+        )
+        .where((hub) => hub.status.toLowerCase() == 'active')
+        .toList(growable: false)..sort(
+        (left, right) =>
+            left.hubName.toLowerCase().compareTo(right.hubName.toLowerCase()),
+      );
 
       if (!mounted) {
         return;
@@ -95,9 +95,10 @@ class _RecipientBrowseCommunityHubsPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: widget.standaloneTitle == null
-          ? null
-          : AppBar(title: Text(widget.standaloneTitle!)),
+      appBar:
+          widget.standaloneTitle == null
+              ? null
+              : AppBar(title: Text(widget.standaloneTitle!)),
       body: _buildBody(),
     );
   }
@@ -108,10 +109,7 @@ class _RecipientBrowseCommunityHubsPageState
     }
 
     if (_errorMessage.isNotEmpty) {
-      return AppErrorState(
-        message: _errorMessage,
-        onRetry: _loadHubs,
-      );
+      return AppErrorState(message: _errorMessage, onRetry: _loadHubs);
     }
 
     if (_hubs.isEmpty) {
@@ -161,9 +159,10 @@ class _RecipientBrowseCommunityHubsPageState
               totalPages: _totalPages,
               onPrevious:
                   _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
-              onNext: _currentPage + 1 < _totalPages
-                  ? () => _goToPage(_currentPage + 1)
-                  : null,
+              onNext:
+                  _currentPage + 1 < _totalPages
+                      ? () => _goToPage(_currentPage + 1)
+                      : null,
             ),
           ],
         ],
@@ -178,12 +177,13 @@ class _RecipientBrowseCommunityHubsPageState
       decoration: InputDecoration(
         hintText: 'Search by hub, address, contact, or ID',
         prefixIcon: const Icon(Icons.search),
-        suffixIcon: _searchController.text.isEmpty
-            ? null
-            : IconButton(
-                onPressed: () => _searchController.clear(),
-                icon: const Icon(Icons.close),
-              ),
+        suffixIcon:
+            _searchController.text.isEmpty
+                ? null
+                : IconButton(
+                  onPressed: () => _searchController.clear(),
+                  icon: const Icon(Icons.close),
+                ),
       ),
     );
   }
@@ -195,23 +195,23 @@ class _RecipientBrowseCommunityHubsPageState
     }
 
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _CommunityHubDetailsPage(hub: hub),
-      ),
+      MaterialPageRoute(builder: (_) => _CommunityHubDetailsPage(hub: hub)),
     );
   }
 
   List<CommunityHubBrowseRecord> get _filteredHubs {
     final query = _searchController.text.trim().toLowerCase();
-    return _hubs.where((hub) {
-      final matchesQuery =
-          query.isEmpty ||
-          hub.hubName.toLowerCase().contains(query) ||
-          hub.hubId.toLowerCase().contains(query) ||
-          hub.address.toLowerCase().contains(query) ||
-          hub.contactNumber.toLowerCase().contains(query);
-      return matchesQuery;
-    }).toList(growable: false);
+    return _hubs
+        .where((hub) {
+          final matchesQuery =
+              query.isEmpty ||
+              hub.hubName.toLowerCase().contains(query) ||
+              hub.hubId.toLowerCase().contains(query) ||
+              hub.address.toLowerCase().contains(query) ||
+              hub.contactNumber.toLowerCase().contains(query);
+          return matchesQuery;
+        })
+        .toList(growable: false);
   }
 
   List<CommunityHubBrowseRecord> get _paginatedHubs {
@@ -270,7 +270,7 @@ class CommunityHubBrowseRecord {
       hubId: _readString(data['hubId'], fallback: docId),
       hubName: _readString(data['hubName'], fallback: 'Community Hub'),
       address: _readString(data['address']),
-      operatingHours: _readString(data['operatingHours']),
+      operatingHours: formatCommunityHubOperatingHours(data),
       contactNumber: _readString(data['contactNumber']),
       status: _readString(data['status'], fallback: 'inactive'),
     );
@@ -318,9 +318,8 @@ class _HubCard extends StatelessWidget {
                       children: [
                         Text(
                           hub.hubName,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: AppSpacing.xs),
                         Text(
@@ -331,9 +330,10 @@ class _HubCard extends StatelessWidget {
                     ),
                   ),
                   _HubBadge(
-                    icon: isSelected
-                        ? Icons.check_circle_outline
-                        : Icons.storefront_outlined,
+                    icon:
+                        isSelected
+                            ? Icons.check_circle_outline
+                            : Icons.storefront_outlined,
                     label: isSelected ? 'Selected' : 'Available',
                     color: isSelected ? AppColors.sun : AppColors.mint,
                   ),
@@ -342,27 +342,32 @@ class _HubCard extends StatelessWidget {
               const SizedBox(height: AppSpacing.md),
               _HubDetailRow(
                 icon: Icons.place_outlined,
-                label: hub.address.isNotEmpty
-                    ? hub.address
-                    : 'Address not provided',
+                label:
+                    hub.address.isNotEmpty
+                        ? hub.address
+                        : 'Address not provided',
               ),
               const SizedBox(height: AppSpacing.sm),
               _HubDetailRow(
                 icon: Icons.schedule_outlined,
-                label: hub.operatingHours.isNotEmpty
-                    ? hub.operatingHours
-                    : 'Operating hours not provided',
+                label:
+                    hub.operatingHours.isNotEmpty
+                        ? hub.operatingHours
+                        : 'Operating hours not provided',
               ),
               const SizedBox(height: AppSpacing.sm),
               _HubDetailRow(
                 icon: Icons.phone_outlined,
-                label: hub.contactNumber.isNotEmpty
-                    ? hub.contactNumber
-                    : 'Contact number not provided',
+                label:
+                    hub.contactNumber.isNotEmpty
+                        ? hub.contactNumber
+                        : 'Contact number not provided',
               ),
               const SizedBox(height: AppSpacing.md),
               Text(
-                selectionEnabled ? 'Tap to select this hub.' : 'Tap to view full hub details.',
+                selectionEnabled
+                    ? 'Tap to select this hub.'
+                    : 'Tap to view full hub details.',
                 style: const TextStyle(
                   color: AppColors.mint,
                   fontWeight: FontWeight.w600,
@@ -406,10 +411,7 @@ class _HubBadge extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w700,
-            ),
+            style: TextStyle(color: color, fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -433,25 +435,23 @@ class _CommunityHubDetailsPage extends StatelessWidget {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Location copied.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Location copied.')));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Community Hub'),
-      ),
+      appBar: AppBar(title: const Text('Community Hub')),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
           Text(
             hub.hubName,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
@@ -470,9 +470,10 @@ class _CommunityHubDetailsPage extends StatelessWidget {
               ),
               _HubBadge(
                 icon: Icons.schedule_outlined,
-                label: hub.operatingHours.isNotEmpty
-                    ? 'Hours listed'
-                    : 'Hours unavailable',
+                label:
+                    hub.operatingHours.isNotEmpty
+                        ? 'Hours listed'
+                        : 'Hours unavailable',
                 color: AppColors.sun,
               ),
             ],
@@ -481,8 +482,7 @@ class _CommunityHubDetailsPage extends StatelessWidget {
           _HubDetailPanel(
             title: 'Location',
             icon: Icons.place_outlined,
-            body:
-                hub.address.isNotEmpty ? hub.address : 'Address not provided',
+            body: hub.address.isNotEmpty ? hub.address : 'Address not provided',
             onBodyTap:
                 hub.address.isNotEmpty ? () => _copyLocation(context) : null,
           ),
@@ -490,17 +490,19 @@ class _CommunityHubDetailsPage extends StatelessWidget {
           _HubDetailPanel(
             title: 'Operating Hours',
             icon: Icons.schedule_outlined,
-            body: hub.operatingHours.isNotEmpty
-                ? hub.operatingHours
-                : 'Operating hours not provided',
+            body:
+                hub.operatingHours.isNotEmpty
+                    ? hub.operatingHours
+                    : 'Operating hours not provided',
           ),
           const SizedBox(height: AppSpacing.md),
           _HubDetailPanel(
             title: 'Contact Number',
             icon: Icons.phone_outlined,
-            body: hub.contactNumber.isNotEmpty
-                ? hub.contactNumber
-                : 'Contact number not provided',
+            body:
+                hub.contactNumber.isNotEmpty
+                    ? hub.contactNumber
+                    : 'Contact number not provided',
           ),
         ],
       ),
@@ -556,8 +558,7 @@ class _HubDetailPanel extends StatelessWidget {
               child: Text(
                 body,
                 style: TextStyle(
-                  color:
-                      onBodyTap == null ? AppColors.sand : AppColors.mint,
+                  color: onBodyTap == null ? AppColors.sand : AppColors.mint,
                   height: 1.5,
                 ),
               ),
@@ -570,10 +571,7 @@ class _HubDetailPanel extends StatelessWidget {
 }
 
 class _HubDetailRow extends StatelessWidget {
-  const _HubDetailRow({
-    required this.icon,
-    required this.label,
-  });
+  const _HubDetailRow({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -588,10 +586,7 @@ class _HubDetailRow extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(
-              color: AppColors.mist,
-              height: 1.5,
-            ),
+            style: const TextStyle(color: AppColors.mist, height: 1.5),
           ),
         ),
       ],

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../constants.dart';
 import '../../widgets/app_forms.dart';
 import '../../widgets/state_widgets.dart';
+import 'hub_operating_schedule.dart';
 
 const List<String> _weekdayOptions = [
   'Monday',
@@ -42,7 +43,6 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
   String _errorMessage = '';
   String _hubDocId = '';
   String _hubId = '';
-  String _legacyOperatingHours = '';
   String _operatingStartDay = '';
   String _operatingEndDay = '';
   TimeOfDay? _operatingStartTime;
@@ -76,11 +76,12 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
         throw Exception('User not authenticated');
       }
 
-      final snapshot = await _firestore
-          .collection('COMMUNITY_HUB')
-          .where('userId', isEqualTo: userId)
-          .limit(1)
-          .get();
+      final snapshot =
+          await _firestore
+              .collection('COMMUNITY_HUB')
+              .where('userId', isEqualTo: userId)
+              .limit(1)
+              .get();
 
       final doc = snapshot.docs.isNotEmpty ? snapshot.docs.first : null;
       final data = doc?.data() ?? const <String, dynamic>{};
@@ -88,7 +89,6 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
       _hubNameController.text = _stringValue(data['hubName']);
       _addressController.text = _stringValue(data['address']);
       _contactNumberController.text = _stringValue(data['contactNumber']);
-      _legacyOperatingHours = _stringValue(data['operatingHours']);
       _operatingStartDay = _stringValue(data['operatingStartDay']);
       _operatingEndDay = _stringValue(data['operatingEndDay']);
       _operatingStartTime = _readTimeOfDay(data['operatingStartTime']);
@@ -142,25 +142,21 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
         );
       }
 
-      final operatingHours =
-          hasCompleteSchedule
-              ? _formatOperatingHoursRange(context)
-              : _legacyOperatingHours;
-
       await _firestore.collection('COMMUNITY_HUB').doc(docId).set({
         'hubId': hubId,
         'userId': userId,
         'hubName': _hubNameController.text.trim(),
         'address': _addressController.text.trim(),
-        'operatingHours': operatingHours,
         'operatingStartDay': _operatingStartDay,
         'operatingEndDay': _operatingEndDay,
-        'operatingStartTime': _operatingStartTime == null
-            ? null
-            : _formatTimeForStorage(_operatingStartTime!),
-        'operatingEndTime': _operatingEndTime == null
-            ? null
-            : _formatTimeForStorage(_operatingEndTime!),
+        'operatingStartTime':
+            _operatingStartTime == null
+                ? null
+                : _formatTimeForStorage(_operatingStartTime!),
+        'operatingEndTime':
+            _operatingEndTime == null
+                ? null
+                : _formatTimeForStorage(_operatingEndTime!),
         'contactNumber': _contactNumberController.text.trim(),
       }, SetOptions(merge: true));
 
@@ -174,9 +170,9 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
         _isSaving = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hub profile updated.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Hub profile updated.')));
     } catch (error) {
       if (!mounted) {
         return;
@@ -198,15 +194,13 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
     }
 
     if (_errorMessage.isNotEmpty) {
-      return AppErrorState(
-        message: _errorMessage,
-        onRetry: _loadHubProfile,
-      );
+      return AppErrorState(message: _errorMessage, onRetry: _loadHubProfile);
     }
 
-    final hubLabel = _hubNameController.text.trim().isNotEmpty
-        ? _hubNameController.text.trim()
-        : 'Community Hub';
+    final hubLabel =
+        _hubNameController.text.trim().isNotEmpty
+            ? _hubNameController.text.trim()
+            : 'Community Hub';
 
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -226,10 +220,9 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
                 children: [
                   Text(
                     'Manage Hub Details',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   const Text(
@@ -272,21 +265,23 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
                       labelText: 'Start Day',
                       prefixIcon: Icon(Icons.event_outlined),
                     ),
-                    items: _weekdayOptions
-                        .map(
-                          (day) => DropdownMenuItem<String>(
-                            value: day,
-                            child: Text(day),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: _isSaving
-                        ? null
-                        : (value) {
-                            setState(() {
-                              _operatingStartDay = value ?? '';
-                            });
-                          },
+                    items:
+                        _weekdayOptions
+                            .map(
+                              (day) => DropdownMenuItem<String>(
+                                value: day,
+                                child: Text(day),
+                              ),
+                            )
+                            .toList(),
+                    onChanged:
+                        _isSaving
+                            ? null
+                            : (value) {
+                              setState(() {
+                                _operatingStartDay = value ?? '';
+                              });
+                            },
                     validator: (value) {
                       if ((value ?? '').trim().isEmpty &&
                           _hasAnyOperatingScheduleInput()) {
@@ -305,21 +300,23 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
                       labelText: 'End Day',
                       prefixIcon: Icon(Icons.event_outlined),
                     ),
-                    items: _weekdayOptions
-                        .map(
-                          (day) => DropdownMenuItem<String>(
-                            value: day,
-                            child: Text(day),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: _isSaving
-                        ? null
-                        : (value) {
-                            setState(() {
-                              _operatingEndDay = value ?? '';
-                            });
-                          },
+                    items:
+                        _weekdayOptions
+                            .map(
+                              (day) => DropdownMenuItem<String>(
+                                value: day,
+                                child: Text(day),
+                              ),
+                            )
+                            .toList(),
+                    onChanged:
+                        _isSaving
+                            ? null
+                            : (value) {
+                              setState(() {
+                                _operatingEndDay = value ?? '';
+                              });
+                            },
                     validator: (value) {
                       if ((value ?? '').trim().isEmpty &&
                           _hasAnyOperatingScheduleInput()) {
@@ -353,11 +350,6 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
                       onPressed: _pickOperatingEndTime,
                       icon: const Icon(Icons.access_time_outlined),
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  const Text(
-                    'Leave blank to keep the current schedule, or fill all four fields together.',
-                    style: TextStyle(color: AppColors.mist, height: 1.5),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   AppTextField(
@@ -422,17 +414,21 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
   }
 
   bool _hasAnyOperatingScheduleInput() {
-    return _operatingStartDay.trim().isNotEmpty ||
-        _operatingEndDay.trim().isNotEmpty ||
-        _operatingStartTime != null ||
-        _operatingEndTime != null;
+    return hasAnyOperatingScheduleInput(
+      startDay: _operatingStartDay,
+      endDay: _operatingEndDay,
+      startTime: _operatingStartTime,
+      endTime: _operatingEndTime,
+    );
   }
 
   bool _hasCompleteOperatingSchedule() {
-    return _operatingStartDay.trim().isNotEmpty &&
-        _operatingEndDay.trim().isNotEmpty &&
-        _operatingStartTime != null &&
-        _operatingEndTime != null;
+    return hasCompleteOperatingSchedule(
+      startDay: _operatingStartDay,
+      endDay: _operatingEndDay,
+      startTime: _operatingStartTime,
+      endTime: _operatingEndTime,
+    );
   }
 
   String _formatTime(TimeOfDay? value) {
@@ -446,24 +442,6 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
-  }
-
-  String _formatOperatingHoursRange(BuildContext context) {
-    final startDay = _operatingStartDay.trim();
-    final endDay = _operatingEndDay.trim();
-    final startTime = _operatingStartTime;
-    final endTime = _operatingEndTime;
-    if (startDay.isEmpty ||
-        endDay.isEmpty ||
-        startTime == null ||
-        endTime == null) {
-      return _legacyOperatingHours;
-    }
-
-    final localizations = MaterialLocalizations.of(context);
-    final startTimeText = localizations.formatTimeOfDay(startTime);
-    final endTimeText = localizations.formatTimeOfDay(endTime);
-    return '${_shortDayLabel(startDay)}-${_shortDayLabel(endDay)}, $startTimeText - $endTimeText';
   }
 
   Future<void> _pickOperatingStartTime() async {
@@ -493,26 +471,10 @@ class _ManageHubProfilePageState extends State<ManageHubProfilePage> {
       _operatingEndTimeController.text = _formatTime(picked);
     });
   }
-
-  static String _shortDayLabel(String day) {
-    return switch (day.toLowerCase()) {
-      'monday' => 'Mon',
-      'tuesday' => 'Tue',
-      'wednesday' => 'Wed',
-      'thursday' => 'Thu',
-      'friday' => 'Fri',
-      'saturday' => 'Sat',
-      'sunday' => 'Sun',
-      _ => day,
-    };
-  }
 }
 
 class _HubProfileHero extends StatelessWidget {
-  const _HubProfileHero({
-    required this.hubName,
-    required this.hubId,
-  });
+  const _HubProfileHero({required this.hubName, required this.hubId});
 
   final String hubName;
   final String hubId;

@@ -859,7 +859,6 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _isLoading = true;
   String _errorMessage = '';
-  String _selectedRequestStatus = 'all';
   String _selectedHandoverStage = 'all';
   List<DonorIncomingRequestRecord> _requests = const [];
   List<DonorIncomingRequestRecord> _filteredRequests = const [];
@@ -1021,7 +1020,6 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
         _filteredRequests = _applyFilters(
           records,
           _searchController.text,
-          _selectedRequestStatus,
           _selectedHandoverStage,
         );
         _currentPage = 0;
@@ -1199,7 +1197,6 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
       _filteredRequests = _applyFilters(
         _requests,
         _searchController.text,
-        _selectedRequestStatus,
         _selectedHandoverStage,
       );
       _currentPage = 0;
@@ -1209,7 +1206,6 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
   List<DonorIncomingRequestRecord> _applyFilters(
     List<DonorIncomingRequestRecord> requests,
     String query,
-    String selectedRequestStatus,
     String selectedHandoverStage,
   ) {
     final normalizedQuery = query.trim().toLowerCase();
@@ -1232,11 +1228,6 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
                       status == 'delivering_to_recipient' ||
                       status == 'item_at_community_hub';
           if (!isEligible) {
-            return false;
-          }
-
-          if (selectedRequestStatus != 'all' &&
-              status != selectedRequestStatus) {
             return false;
           }
 
@@ -1283,7 +1274,6 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
   }
 
   Widget _buildFilters() {
-    final showStatusFilters = widget.title == 'Donation Tracking';
     return Column(
       children: [
         TextField(
@@ -1303,110 +1293,41 @@ class _DonorRequestLauncherPageState extends State<_DonorRequestLauncherPage> {
                     : 'Search handover requests',
           ),
         ),
-        if (showStatusFilters) ...[
-          const SizedBox(height: AppSpacing.md),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedRequestStatus,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Status'),
-                  items: const [
-                    DropdownMenuItem(value: 'all', child: Text('All statuses')),
-                    DropdownMenuItem(
-                      value: 'approved',
-                      child: Text('Approved'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'delivering',
-                      child: Text('Delivering'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'delivering_to_hub',
-                      child: Text('Delivering to hub'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'item_at_community_hub',
-                      child: Text('Item at community hub'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'delivering_to_recipient',
-                      child: Text('Delivering to recipient'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'completed',
-                      child: Text('Completed'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _selectedRequestStatus = value;
-                      _currentPage = 0;
-                      _filteredRequests = _applyFilters(
-                        _requests,
-                        _searchController.text,
-                        _selectedRequestStatus,
-                        _selectedHandoverStage,
-                      );
-                    });
-                  },
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedHandoverStage,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Handover stage',
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'all', child: Text('All stages')),
-                    DropdownMenuItem(
-                      value: 'approved',
-                      child: Text('Approved'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'delivering',
-                      child: Text('Delivering'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'delivering_to_hub',
-                      child: Text('Delivering to hub'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'item_at_community_hub',
-                      child: Text('Item at community hub'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'delivering_to_recipient',
-                      child: Text('Delivering to recipient'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'completed',
-                      child: Text('Completed'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _selectedHandoverStage = value;
-                      _currentPage = 0;
-                      _filteredRequests = _applyFilters(
-                        _requests,
-                        _searchController.text,
-                        _selectedRequestStatus,
-                        _selectedHandoverStage,
-                      );
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
+        const SizedBox(height: AppSpacing.md),
+        DropdownButtonFormField<String>(
+          initialValue: _selectedHandoverStage,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Handover stage'),
+          items: const [
+            DropdownMenuItem(value: 'all', child: Text('All stages')),
+            DropdownMenuItem(value: 'approved', child: Text('Approved')),
+            DropdownMenuItem(
+              value: 'delivering_to_hub',
+              child: Text('Delivering to hub'),
+            ),
+            DropdownMenuItem(
+              value: 'item_at_community_hub',
+              child: Text('Item at community hub'),
+            ),
+            DropdownMenuItem(
+              value: 'delivering_to_recipient',
+              child: Text('Delivering to recipient'),
+            ),
+            DropdownMenuItem(value: 'completed', child: Text('Completed')),
+          ],
+          onChanged: (value) {
+            if (value == null) return;
+            setState(() {
+              _selectedHandoverStage = value;
+              _currentPage = 0;
+              _filteredRequests = _applyFilters(
+                _requests,
+                _searchController.text,
+                _selectedHandoverStage,
+              );
+            });
+          },
+        ),
       ],
     );
   }

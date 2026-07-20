@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_routes.dart';
 import '../../constants.dart';
 import '../../widgets/app_forms.dart';
+import 'auth_validators.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -19,7 +20,6 @@ class _RegisterPageState extends State<RegisterPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _recipientTypeController = TextEditingController();
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
@@ -30,7 +30,6 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _obscureConfirmPassword = true;
   String _errorMessage = '';
 
-  bool get _isRecipient => _selectedRole == 'recipient';
   bool get _isHub => _selectedRole == 'hub';
 
   void _updateState(VoidCallback fn) {
@@ -46,7 +45,6 @@ class _RegisterPageState extends State<RegisterPage> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _recipientTypeController.dispose();
     super.dispose();
   }
 
@@ -69,7 +67,6 @@ class _RegisterPageState extends State<RegisterPage> {
         'email': email,
         'password': password,
         'role': _selectedRole,
-        if (_isRecipient) 'recipientType': _recipientTypeController.text.trim(),
       });
 
       await _auth.signInWithEmailAndPassword(email: email, password: password);
@@ -175,12 +172,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             prefixIcon: const Icon(
                               Icons.person_outline_rounded,
                             ),
-                            validator: (value) {
-                              if ((value ?? '').trim().isEmpty) {
-                                return 'Enter your full name.';
-                              }
-                              return null;
-                            },
+                            validator: validateRequiredFullName,
                           ),
                           const SizedBox(height: AppSpacing.md),
                           AppTextField(
@@ -190,18 +182,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             prefixIcon: const Icon(
                               Icons.alternate_email_rounded,
                             ),
-                            validator: (value) {
-                              final email = (value ?? '').trim();
-                              if (email.isEmpty) {
-                                return 'Enter your email.';
-                              }
-                              if (!RegExp(
-                                r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$',
-                              ).hasMatch(email)) {
-                                return 'Enter a valid email address.';
-                              }
-                              return null;
-                            },
+                            validator: validateRequiredEmail,
                           ),
                           const SizedBox(height: AppSpacing.md),
                           DropdownButtonFormField<String>(
@@ -238,24 +219,6 @@ class _RegisterPageState extends State<RegisterPage> {
                                       });
                                     },
                           ),
-                          if (_isRecipient) ...[
-                            const SizedBox(height: AppSpacing.md),
-                            AppTextField(
-                              controller: _recipientTypeController,
-                              label: 'Recipient Type',
-                              hint: 'Individual, Family, NGO, Shelter...',
-                              prefixIcon: const Icon(Icons.groups_2_outlined),
-                              validator: (value) {
-                                if (!_isRecipient) {
-                                  return null;
-                                }
-                                if ((value ?? '').trim().isEmpty) {
-                                  return 'Enter the recipient type.';
-                                }
-                                return null;
-                              },
-                            ),
-                          ],
                           if (_isHub) ...[
                             const SizedBox(height: AppSpacing.sm),
                             const Text(
@@ -284,12 +247,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                     : Icons.visibility_off_outlined,
                               ),
                             ),
-                            validator: (value) {
-                              if ((value ?? '').length < 6) {
-                                return 'Use at least 6 characters.';
-                              }
-                              return null;
-                            },
+                            validator: validateRegistrationPassword,
                           ),
                           const SizedBox(height: AppSpacing.md),
                           AppTextField(
@@ -310,12 +268,11 @@ class _RegisterPageState extends State<RegisterPage> {
                                     : Icons.visibility_off_outlined,
                               ),
                             ),
-                            validator: (value) {
-                              if (value != _passwordController.text) {
-                                return 'Passwords do not match.';
-                              }
-                              return null;
-                            },
+                            validator:
+                                (value) => validateConfirmPassword(
+                                  value,
+                                  _passwordController.text,
+                                ),
                           ),
                           if (_errorMessage.isNotEmpty) ...[
                             const SizedBox(height: AppSpacing.md),

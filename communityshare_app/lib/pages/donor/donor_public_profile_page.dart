@@ -49,10 +49,7 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
           await _firestore.collection('USER').doc(widget.donorId).get();
       final legacyDoc =
           await _firestore.collection('USER').doc(widget.donorId).get();
-      final data = <String, dynamic>{
-        ...?legacyDoc.data(),
-        ...?userDoc.data(),
-      };
+      final data = <String, dynamic>{...?legacyDoc.data(), ...?userDoc.data()};
 
       if (!mounted) {
         return;
@@ -75,21 +72,21 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
 
   Future<void> _loadListings() async {
     try {
-      final snapshot = await _firestore
-          .collection('ITEM_LISTING')
-          .where('donorId', isEqualTo: widget.donorId)
-          .get();
+      final snapshot =
+          await _firestore
+              .collection('ITEM_LISTING')
+              .where('donorId', isEqualTo: widget.donorId)
+              .get();
 
       final listings = snapshot.docs
-          .map(ItemListing.fromFirestore)
-          .toList(growable: false)
-        ..sort((left, right) {
-          final leftDate =
-              left.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final rightDate =
-              right.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-          return rightDate.compareTo(leftDate);
-        });
+        .map(ItemListing.fromFirestore)
+        .toList(growable: false)..sort((left, right) {
+        final leftDate =
+            left.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final rightDate =
+            right.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return rightDate.compareTo(leftDate);
+      });
 
       if (!mounted) {
         return;
@@ -118,9 +115,7 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
     final paginatedListings = _paginatedListings;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Donor Profile'),
-      ),
+      appBar: AppBar(title: const Text('Donor Profile')),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
@@ -163,9 +158,9 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
           const SizedBox(height: AppSpacing.lg),
           Text(
             'Donation / Listing History',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: AppSpacing.xs),
           const Text(
@@ -198,9 +193,10 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
               totalPages: _totalPages,
               onPrevious:
                   _currentPage > 0 ? () => _goToPage(_currentPage - 1) : null,
-              onNext: _currentPage + 1 < _totalPages
-                  ? () => _goToPage(_currentPage + 1)
-                  : null,
+              onNext:
+                  _currentPage + 1 < _totalPages
+                      ? () => _goToPage(_currentPage + 1)
+                      : null,
             ),
           ],
         ],
@@ -228,7 +224,11 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
   }
 
   String get _donorBio {
-    return (_donorData?['bio'] as String?)?.trim() ?? '';
+    final bio = (_donorData?['bio'] as String?)?.trim() ?? '';
+    if (bio == 'Donor account used for seed data.') {
+      return '';
+    }
+    return bio;
   }
 
   String get _donorRoleLabel {
@@ -279,9 +279,10 @@ class _DonorPublicProfilePageState extends State<DonorPublicProfilePage> {
         .split(RegExp(r'[_\s]+'))
         .where((part) => part.trim().isNotEmpty)
         .map((part) {
-      final lower = part.toLowerCase();
-      return '${lower[0].toUpperCase()}${lower.substring(1)}';
-    }).join(' ');
+          final lower = part.toLowerCase();
+          return '${lower[0].toUpperCase()}${lower.substring(1)}';
+        })
+        .join(' ');
   }
 }
 
@@ -361,11 +362,7 @@ class _DonorHeroCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipOval(
-                child: SizedBox(
-                  width: 74,
-                  height: 74,
-                  child: _profileImage(),
-                ),
+                child: SizedBox(width: 74, height: 74, child: _profileImage()),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
@@ -452,10 +449,7 @@ class _DonorHeroCard extends StatelessWidget {
 }
 
 class _ListingHistoryCard extends StatelessWidget {
-  const _ListingHistoryCard({
-    required this.item,
-    required this.highlighted,
-  });
+  const _ListingHistoryCard({required this.item, required this.highlighted});
 
   final ItemListing item;
   final bool highlighted;
@@ -482,13 +476,14 @@ class _ListingHistoryCard extends StatelessWidget {
                 child: SizedBox(
                   width: 82,
                   height: 82,
-                  child: item.photoUrl.trim().isNotEmpty
-                      ? ImageUtils.base64ToImage(
-                          item.photoUrl,
-                          fit: BoxFit.cover,
-                          errorWidget: _imageFallback(),
-                        )
-                      : _imageFallback(),
+                  child:
+                      item.photoUrl.trim().isNotEmpty
+                          ? ImageUtils.base64ToImage(
+                            item.photoUrl,
+                            fit: BoxFit.cover,
+                            errorWidget: _imageFallback(),
+                          )
+                          : _imageFallback(),
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
@@ -502,11 +497,14 @@ class _ListingHistoryCard extends StatelessWidget {
                       children: [
                         _HistoryPill(label: _titleCaseLabel(item.category)),
                         _HistoryPill(
-                          label: item.isAvailable
-                              ? 'Available'
-                              : _titleCaseLabel(item.availabilityStatus),
+                          label:
+                              item.isAvailable
+                                  ? 'Available'
+                                  : _titleCaseLabel(item.availabilityStatus),
                           color:
-                              item.isAvailable ? AppColors.mint : AppColors.sand,
+                              item.isAvailable
+                                  ? AppColors.mint
+                                  : AppColors.sand,
                         ),
                         if (highlighted)
                           const _HistoryPill(
@@ -557,10 +555,7 @@ class _ListingHistoryCard extends StatelessWidget {
     return Container(
       color: AppColors.night,
       alignment: Alignment.center,
-      child: const Icon(
-        Icons.inventory_2_outlined,
-        color: AppColors.mint,
-      ),
+      child: const Icon(Icons.inventory_2_outlined, color: AppColors.mint),
     );
   }
 
@@ -576,17 +571,15 @@ class _ListingHistoryCard extends StatelessWidget {
         .split(RegExp(r'[_\s]+'))
         .where((part) => part.trim().isNotEmpty)
         .map((part) {
-      final lower = part.toLowerCase();
-      return '${lower[0].toUpperCase()}${lower.substring(1)}';
-    }).join(' ');
+          final lower = part.toLowerCase();
+          return '${lower[0].toUpperCase()}${lower.substring(1)}';
+        })
+        .join(' ');
   }
 }
 
 class _SummaryStat extends StatelessWidget {
-  const _SummaryStat({
-    required this.label,
-    required this.value,
-  });
+  const _SummaryStat({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -604,10 +597,7 @@ class _SummaryStat extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.xs),
-        Text(
-          label,
-          style: const TextStyle(color: AppColors.sand),
-        ),
+        Text(label, style: const TextStyle(color: AppColors.sand)),
       ],
     );
   }
@@ -642,10 +632,7 @@ class _HeroChip extends StatelessWidget {
 }
 
 class _HistoryPill extends StatelessWidget {
-  const _HistoryPill({
-    required this.label,
-    this.color = AppColors.pine,
-  });
+  const _HistoryPill({required this.label, this.color = AppColors.pine});
 
   final String label;
   final Color color;
@@ -674,10 +661,7 @@ class _HistoryPill extends StatelessWidget {
 }
 
 class _InfoLine extends StatelessWidget {
-  const _InfoLine({
-    required this.icon,
-    required this.value,
-  });
+  const _InfoLine({required this.icon, required this.value});
 
   final IconData icon;
   final String value;

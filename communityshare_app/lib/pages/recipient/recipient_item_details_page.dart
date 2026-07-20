@@ -474,18 +474,6 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                                 ),
                               ),
                             ],
-                            const SizedBox(height: AppSpacing.md),
-                            Wrap(
-                              spacing: AppSpacing.sm,
-                              runSpacing: AppSpacing.sm,
-                              children: [
-                                _DetailPill(
-                                  label: _donorRoleLabel,
-                                  color: AppColors.pine,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
                           ],
                         ),
                       ),
@@ -713,17 +701,13 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
                         hintText: 'Type the reason for this report.',
                         fillColor: AppColors.night,
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(
-                            AppRadius.sm,
-                          ),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
                           borderSide: BorderSide(
                             color: AppColors.coral.withValues(alpha: 0.28),
                           ),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(
-                            AppRadius.sm,
-                          ),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
                           borderSide: const BorderSide(
                             color: AppColors.coral,
                             width: 1.2,
@@ -874,15 +858,6 @@ class _RecipientItemDetailsPageState extends State<RecipientItemDetailsPage> {
     }
 
     return '';
-  }
-
-  String get _donorRoleLabel {
-    final role = (_donorData?['role'] as String?)?.trim();
-    if (role != null && role.isNotEmpty) {
-      return role.toUpperCase();
-    }
-
-    return 'DONOR';
   }
 
   Widget _donorProfileImage() {

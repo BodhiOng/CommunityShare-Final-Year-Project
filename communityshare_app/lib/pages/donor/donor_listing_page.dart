@@ -267,11 +267,9 @@ class _DonorListingPageState extends State<DonorListingPage> {
     }
 
     try {
-      final batch = _firestore.batch();
-      for (final docId in _selectedForDelete) {
-        batch.delete(_firestore.collection('ITEM_LISTING').doc(docId));
-      }
-      await batch.commit();
+      final selectedCount = _selectedForDelete.length;
+      final deletedRelatedCount =
+          await _deleteSelectedListingsAndRelatedRecords(_selectedForDelete);
       if (!mounted) {
         return;
       }
@@ -279,7 +277,7 @@ class _DonorListingPageState extends State<DonorListingPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Deleted ${_selectedForDelete.length} donation${_selectedForDelete.length == 1 ? '' : 's'}.',
+            'Deleted $selectedCount donation${selectedCount == 1 ? '' : 's'} and $deletedRelatedCount related record${deletedRelatedCount == 1 ? '' : 's'}.',
           ),
         ),
       );
@@ -296,6 +294,104 @@ class _DonorListingPageState extends State<DonorListingPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Unable to delete donation: $error')),
       );
+    }
+  }
+
+  Future<int> _deleteSelectedListingsAndRelatedRecords(
+    Iterable<String> listingDocIds,
+  ) async {
+    final listingRefsByPath =
+        <String, DocumentReference<Map<String, dynamic>>>{};
+    final relatedRefsByPath =
+        <String, DocumentReference<Map<String, dynamic>>>{};
+    final knownItemsByDocId = {for (final item in _items) item.docId: item};
+
+    void addListingRef(DocumentReference<Map<String, dynamic>> ref) {
+      listingRefsByPath[ref.path] = ref;
+    }
+
+    void addRelatedRef(DocumentReference<Map<String, dynamic>> ref) {
+      relatedRefsByPath[ref.path] = ref;
+    }
+
+    for (final listingDocId in listingDocIds) {
+      final listingRef = _firestore
+          .collection('ITEM_LISTING')
+          .doc(listingDocId);
+      addListingRef(listingRef);
+
+      final knownItem = knownItemsByDocId[listingDocId];
+      var itemId = knownItem?.itemId.trim() ?? '';
+
+      if (itemId.isEmpty) {
+        final listingSnapshot = await listingRef.get();
+        final listingData = listingSnapshot.data();
+        itemId = listingData?['itemId']?.toString().trim() ?? listingDocId;
+      }
+
+      if (itemId.isEmpty) {
+        itemId = listingDocId;
+      }
+
+      final requestSnapshot =
+          await _firestore
+              .collection('ITEM_REQUEST')
+              .where('itemId', isEqualTo: itemId)
+              .get();
+
+      final requestIds = <String>{};
+      for (final requestDoc in requestSnapshot.docs) {
+        addRelatedRef(requestDoc.reference);
+        final storedRequestId =
+            requestDoc.data()['requestId']?.toString().trim() ?? '';
+        final requestId =
+            storedRequestId.isNotEmpty ? storedRequestId : requestDoc.id;
+        if (requestId.isNotEmpty) {
+          requestIds.add(requestId);
+        }
+      }
+
+      for (final requestId in requestIds) {
+        final handoverSnapshot =
+            await _firestore
+                .collection('HANDOVER')
+                .where('requestId', isEqualTo: requestId)
+                .get();
+        for (final handoverDoc in handoverSnapshot.docs) {
+          addRelatedRef(handoverDoc.reference);
+        }
+
+        final historySnapshot =
+            await _firestore
+                .collection('DONATION_STATUS_HISTORY')
+                .where('requestId', isEqualTo: requestId)
+                .get();
+        for (final historyDoc in historySnapshot.docs) {
+          addRelatedRef(historyDoc.reference);
+        }
+      }
+    }
+
+    await _deleteDocumentRefs([
+      ...relatedRefsByPath.values,
+      ...listingRefsByPath.values,
+    ]);
+
+    return relatedRefsByPath.length;
+  }
+
+  Future<void> _deleteDocumentRefs(
+    List<DocumentReference<Map<String, dynamic>>> refs,
+  ) async {
+    const batchSize = 450;
+    for (var index = 0; index < refs.length; index += batchSize) {
+      final batch = _firestore.batch();
+      final end =
+          index + batchSize > refs.length ? refs.length : index + batchSize;
+      for (final ref in refs.sublist(index, end)) {
+        batch.delete(ref);
+      }
+      await batch.commit();
     }
   }
 
@@ -781,7 +877,8 @@ class _DonationCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                if (item.expiryDate != null && item.category != 'consumables') ...[
+                if (item.expiryDate != null &&
+                    item.category != 'consumables') ...[
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     'Expiry ${_formatDate(item.expiryDate!)}',
@@ -1045,13 +1142,16 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
   }
 
   Future<void> _selectCommunityHub() async {
-    final selectedHub = await Navigator.of(context).push<CommunityHubBrowseRecord>(
+    final selectedHub = await Navigator.of(
+      context,
+    ).push<CommunityHubBrowseRecord>(
       MaterialPageRoute(
-        builder: (_) => RecipientBrowseCommunityHubsPage(
-          selectedHubId: _selectedHubId,
-          selectionEnabled: true,
-          standaloneTitle: 'Select Community Hub',
-        ),
+        builder:
+            (_) => RecipientBrowseCommunityHubsPage(
+              selectedHubId: _selectedHubId,
+              selectionEnabled: true,
+              standaloneTitle: 'Select Community Hub',
+            ),
       ),
     );
 
@@ -1244,11 +1344,6 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  const Text(
-                    'This form now writes the donor item layout directly instead of the old seller product fields.',
-                    style: TextStyle(color: AppColors.mist, height: 1.45),
                   ),
                   if (_errorMessage != null) ...[
                     const SizedBox(height: AppSpacing.md),
@@ -1444,7 +1539,9 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
                     ),
                     child: Text(
                       _isEditing
-                          ? _titleCase(widget.item?.availabilityStatus ?? 'available')
+                          ? _titleCase(
+                            widget.item?.availabilityStatus ?? 'available',
+                          )
                           : 'Available',
                     ),
                   ),
@@ -1514,7 +1611,9 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
                               width: double.infinity,
                               padding: const EdgeInsets.all(AppSpacing.md),
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(AppRadius.sm),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.sm,
+                                ),
                                 border: Border.all(color: AppColors.mint),
                                 color: AppColors.forest,
                               ),
@@ -1522,21 +1621,22 @@ class _DonationFormSheetState extends State<_DonationFormSheet> {
                                 children: [
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           _selectedHubName.isNotEmpty
                                               ? _selectedHubName
                                               : 'Browse community hubs',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleSmall
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w700,
-                                                color: _selectedHubName.isNotEmpty
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.titleSmall?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                            color:
+                                                _selectedHubName.isNotEmpty
                                                     ? AppColors.white
                                                     : AppColors.sand,
-                                              ),
+                                          ),
                                         ),
                                         const SizedBox(height: AppSpacing.xs),
                                         Text(

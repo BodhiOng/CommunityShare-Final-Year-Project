@@ -91,22 +91,11 @@ exports.createManagedUser = onCall(async (request) => {
   const recipientType = optionalString(data.recipientType);
   const hubDetails = normalizeHubDetails(data.hubDetails || {}, status);
 
-  if (role === "recipient" && !recipientType) {
-    throw new HttpsError(
-      "invalid-argument",
-      "recipientType is required for recipient users.",
-    );
-  }
-
-  if (role === "hub") {
-    validateHubDetails(hubDetails);
-  }
-
   const createdUser = await createAuthUser({
     email,
     password,
     displayName: fullName,
-    disabled: status !== "active",
+    disabled: false,
   });
 
   try {
@@ -154,7 +143,6 @@ async function createUserDocuments({
       userId,
       fullName,
       email,
-      passwordHash: "",
       phoneCountryCode,
       phoneLocalNumber,
       role,
@@ -254,7 +242,6 @@ exports.promoteManagedUserToAdmin = onCall(async (request) => {
         userId,
         fullName,
         email,
-        passwordHash: optionalString(currentData.passwordHash),
         phoneCountryCode,
         phoneLocalNumber,
         role: "admin",
@@ -548,19 +535,6 @@ function normalizeHubDetails(value, status) {
     contactNumber: optionalString(value.contactNumber),
     status,
   };
-}
-
-function validateHubDetails(hubDetails, options = {}) {
-  const requireHubId = options.requireHubId !== false;
-  if (requireHubId && !hubDetails.hubId) {
-    throw new HttpsError("invalid-argument", "hubId is required for hub users.");
-  }
-  if (options.requireHubName !== false && !hubDetails.hubName) {
-    throw new HttpsError(
-      "invalid-argument",
-      "hubName is required for hub users.",
-    );
-  }
 }
 
 function requiredString(value, field) {

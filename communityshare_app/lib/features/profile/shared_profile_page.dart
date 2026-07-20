@@ -80,7 +80,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
   List<_CountryOption> _countryOptions = const [];
   String _selectedPhoneCountryCode = '';
   String _pendingHubContactNumber = '';
-  String _legacyHubOperatingHours = '';
   String _hubOperatingStartDay = '';
   String _hubOperatingEndDay = '';
   TimeOfDay? _hubOperatingStartTime;
@@ -190,7 +189,6 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         fallback:
             '${_stringValue(hubData['contactCountryCode'])}${_stringValue(hubData['contactLocalNumber'])}',
       );
-      _legacyHubOperatingHours = _stringValue(hubData['operatingHours']);
       _hubOperatingStartDay = _stringValue(hubData['operatingStartDay']);
       _hubOperatingEndDay = _stringValue(hubData['operatingEndDay']);
       _hubOperatingStartTime = _readTimeOfDay(hubData['operatingStartTime']);
@@ -333,9 +331,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
     }
 
     final code =
-        _countryOptions.any((option) => option.dialCode == value)
-            ? value
-            : '';
+        _countryOptions.any((option) => option.dialCode == value) ? value : '';
     if (!mounted) {
       return;
     }
@@ -395,9 +391,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
 
   void _syncHubOperatingScheduleControllers() {
     _hubOperatingHoursController.text = _formatOperatingHoursRange(context);
-    _hubOperatingStartTimeController.text = _formatTime(
-      _hubOperatingStartTime,
-    );
+    _hubOperatingStartTimeController.text = _formatTime(_hubOperatingStartTime);
     _hubOperatingEndTimeController.text = _formatTime(_hubOperatingEndTime);
   }
 
@@ -465,7 +459,7 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
         endDay.isEmpty ||
         startTime == null ||
         endTime == null) {
-      return _legacyHubOperatingHours;
+      return '';
     }
 
     final localizations = MaterialLocalizations.of(context);
@@ -477,7 +471,8 @@ class _SharedProfilePageState extends State<SharedProfilePage> {
   Future<void> _pickHubOperatingStartTime() async {
     final picked = await showTimePicker(
       context: context,
-      initialTime: _hubOperatingStartTime ?? const TimeOfDay(hour: 9, minute: 0),
+      initialTime:
+          _hubOperatingStartTime ?? const TimeOfDay(hour: 9, minute: 0),
     );
     if (picked == null || !mounted) {
       return;

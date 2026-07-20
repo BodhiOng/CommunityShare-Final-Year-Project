@@ -248,19 +248,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
     final phoneLocalNumberController = TextEditingController(
       text: user?.phoneLocalNumber ?? '',
     );
-    final recipientTypeController =
-        TextEditingController(text: details.recipientType);
-    final hubIdController = TextEditingController(
-      text: details.hubId.isNotEmpty
-          ? details.hubId
-          : (user?.userId ?? ''),
-    );
-    final hubNameController = TextEditingController(text: details.hubName);
-    final addressController = TextEditingController(text: details.address);
-    final operatingHoursController =
-        TextEditingController(text: details.operatingHours);
-    final contactNumberController =
-        TextEditingController(text: details.contactNumber);
 
     var role = user?.role ?? 'recipient';
     var status = user?.status ?? 'active';
@@ -294,14 +281,14 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                   phoneLocalNumber: phoneLocalNumberController.text.trim(),
                   role: role,
                   status: status,
-                  recipientType: recipientTypeController.text.trim(),
+                  recipientType: details.recipientType,
                   hubDetails: _RoleSpecificDetails(
                     docId: details.docId,
-                    hubId: hubIdController.text.trim(),
-                    hubName: hubNameController.text.trim(),
-                    address: addressController.text.trim(),
-                    operatingHours: operatingHoursController.text.trim(),
-                    contactNumber: contactNumberController.text.trim(),
+                    hubId: details.hubId,
+                    hubName: details.hubName,
+                    address: details.address,
+                    operatingHours: details.operatingHours,
+                    contactNumber: details.contactNumber,
                     status: status,
                     donorId: details.donorId,
                     recipientId: details.recipientId,
@@ -462,10 +449,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                             }
                             setModalState(() {
                               role = value;
-                              if (role == 'hub' &&
-                                  hubIdController.text.trim().isEmpty) {
-                                hubIdController.text = user?.userId ?? '';
-                              }
                             });
                           },
                         ),
@@ -499,103 +482,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                             });
                           },
                         ),
-                        if (role == 'recipient') ...[
-                          const SizedBox(height: AppSpacing.md),
-                          AppTextField(
-                            controller: recipientTypeController,
-                            label: 'Recipient Type',
-                            prefixIcon: const Icon(Icons.groups_2_outlined),
-                            validator: (value) {
-                              if (role != 'recipient') {
-                                return null;
-                              }
-                              if ((value ?? '').trim().isEmpty) {
-                                return 'Enter the recipient type.';
-                              }
-                              return null;
-                            },
-                          ),
-                        ],
-                        if (role == 'hub') ...[
-                          const SizedBox(height: AppSpacing.md),
-                          AppTextField(
-                            controller: hubIdController,
-                            label: 'Hub ID',
-                            prefixIcon: const Icon(Icons.numbers_outlined),
-                            validator: (value) {
-                              if (role != 'hub') {
-                                return null;
-                              }
-                              if ((value ?? '').trim().isEmpty) {
-                                return 'Enter the hub ID.';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          AppTextField(
-                            controller: hubNameController,
-                            label: 'Hub Name',
-                            prefixIcon:
-                                const Icon(Icons.storefront_outlined),
-                            validator: (value) {
-                              if (role != 'hub') {
-                                return null;
-                              }
-                              if ((value ?? '').trim().isEmpty) {
-                                return 'Enter the hub name.';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          AppTextField(
-                            controller: addressController,
-                            label: 'Address',
-                            prefixIcon: const Icon(Icons.place_outlined),
-                            validator: (value) {
-                              if (role != 'hub') {
-                                return null;
-                              }
-                              if ((value ?? '').trim().isEmpty) {
-                                return 'Enter the hub address.';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          AppTextField(
-                            controller: operatingHoursController,
-                            label: 'Operating Hours',
-                            prefixIcon: const Icon(Icons.schedule_outlined),
-                            validator: (value) {
-                              if (role != 'hub') {
-                                return null;
-                              }
-                              if ((value ?? '').trim().isEmpty) {
-                                return 'Enter the operating hours.';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          AppTextField(
-                            controller: contactNumberController,
-                            label: 'Contact Number',
-                            keyboardType: TextInputType.phone,
-                            prefixIcon: const Icon(Icons.call_outlined),
-                            validator: (value) {
-                              if (role != 'hub') {
-                                return null;
-                              }
-                              final trimmed = value?.trim() ?? '';
-                              if (trimmed.isEmpty) {
-                                return 'Enter the contact number.';
-                              }
-                              return null;
-                            },
-                          ),
-                        ],
                         if (errorMessage.isNotEmpty) ...[
                           const SizedBox(height: AppSpacing.md),
                           Container(
@@ -722,7 +608,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
         'userId': userId,
         'fullName': fullName,
         'email': email,
-        'passwordHash': existingUser.passwordHash,
         'phoneCountryCode': phoneCountryCode,
         'phoneLocalNumber': phoneLocalNumber,
         'role': role,
@@ -993,7 +878,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
   }
 
   Future<void> _showUserDetails(_ManagedUserRecord user) async {
-    final details = await _loadRoleSpecificDetails(user.userId, user.role);
     if (!mounted) {
       return;
     }
@@ -1020,15 +904,6 @@ class _AdminUserCrudPageState extends State<AdminUserCrudPage> {
                       ? 'Not available'
                       : DateFormat('MMM d, yyyy').format(user.createdAt!),
                 ),
-                if (user.role == 'recipient')
-                  _detailLine('Recipient Type', details.recipientType),
-                if (user.role == 'hub') ...[
-                  _detailLine('Hub ID', details.hubId),
-                  _detailLine('Hub Name', details.hubName),
-                  _detailLine('Address', details.address),
-                  _detailLine('Operating Hours', details.operatingHours),
-                  _detailLine('Contact Number', details.contactNumber),
-                ],
               ],
             ),
           ),
@@ -1376,7 +1251,6 @@ class _ManagedUserRecord {
     required this.userId,
     required this.fullName,
     required this.email,
-    required this.passwordHash,
     required this.phoneCountryCode,
     required this.phoneLocalNumber,
     required this.role,
@@ -1392,7 +1266,6 @@ class _ManagedUserRecord {
       userId: _stringValue(data['userId'], fallback: doc.id),
       fullName: _stringValue(data['fullName']),
       email: _stringValue(data['email']),
-      passwordHash: _stringValue(data['passwordHash']),
       phoneCountryCode: _resolvePhoneCountryCode(data),
       phoneLocalNumber: _resolvePhoneLocalNumber(data),
       role: _stringValue(data['role'], fallback: 'recipient'),
@@ -1404,7 +1277,6 @@ class _ManagedUserRecord {
   final String userId;
   final String fullName;
   final String email;
-  final String passwordHash;
   final String phoneCountryCode;
   final String phoneLocalNumber;
   final String role;
